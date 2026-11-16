@@ -196,6 +196,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.13.2 — A panel line too long for its row is never lost: it gets the arrow, opens on click with the whole line first, and shows in full when the pointer rests on it. `/reload` is enough.
 - 0.13.1 — The key binding's line names the add-on: "AI Companion: open or close the panel", since the Key Bindings screen showed no heading above it. `/reload` is enough.
 - 0.13.0 — Feedback from inside the game: `/aic feedback` (or the panel's Feedback button) opens a window to report a problem or share an idea; `/aic bug <text>` and `/aic idea <text>` do it in one line. Entries are kept in `feedback` in the saved file with the add-on version, place and what the add-on last did, reach the companion at the next `/aic save`, and show "Sent as issues" once the companion lists them under `reported` in `plans.json`. The "Sort by advice" button above the bags is withdrawn while the sort is rethought; `/aic sort` still works. `/reload` is enough.
 - 0.12.2 — Key binding: Key Bindings > AddOns > AI Companion > "Open or close the panel". No key by default; the minimap button's tooltip names the key once one is set. Adds `Bindings.xml`: one full game restart.

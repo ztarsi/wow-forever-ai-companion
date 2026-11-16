@@ -771,3 +771,68 @@ class FeedbackButton(PanelTest):
         self.assertTrue(g.lua.globals().AICompanionFeedbackFrame.shown)
         self.assertEqual(g.lua.eval("AICompanionFeedbackFrame.strata"), "FULLSCREEN_DIALOG")   # above the panel
         self.assertEqual(f.strata, "DIALOG")
+
+LONG_NEXT = ("You carry 13 Wool Cloth. The First Aid trainer listed Wool Bandage at 80; "
+             "make Heavy Linen Bandage until then, at Testtown 52.1, 47.3, and buy the Expert book at 125.")
+
+
+class LongLines(PanelTest):
+    """A line too long for one row can always be read in full: click opens it, hover shows it."""
+
+    def plan(self):
+        import copy
+        plan = copy.deepcopy(PLAN)
+        c = plan["characters"]["Testchar"]
+        c["professions"] = {"First Aid": {"status": "66 of 150.", "next": LONG_NEXT, "tag": "game"}}
+        c["next"].append({"id": "t-short", "title": "Hearth home", "tag": "game"})
+        return plan
+
+    def row(self, g, starts):
+        return g.lua.eval('''(function(prefix)
+            for _, fr in ipairs(Mock.frames) do
+                if fr.kind == "Button" and fr.title and fr.shown and type(rawget(fr.title, "text")) == "string"
+                   and rawget(fr.title, "text"):sub(1, #prefix) == prefix then return fr end
+            end end)''')(starts)
+
+    def test_long_line_opens_on_click(self):
+        g = self.game(data_source=data_file(self.plan()))
+        f = self.open(g)
+        self.panel(g).select("professions")
+        r = self.row(g, "Next: You carry 13 Wool Cloth")
+        self.assertTrue(r.arrow.shown, "a cut-off line gets the arrow, so it can be opened")
+        self.assertFalse(r.sub.shown)
+        r.scripts.OnClick(r)
+        r = self.row(g, "Next: You carry 13 Wool Cloth")
+        self.assertTrue(r.sub.shown)
+        self.assertEqual(r.sub.text, "Next: " + LONG_NEXT)
+        r.scripts.OnClick(r)
+        self.assertFalse(self.row(g, "Next: You carry 13 Wool Cloth").sub.shown)
+
+    def test_long_line_shows_in_full_on_hover(self):
+        g = self.game(data_source=data_file(self.plan()))
+        self.open(g)
+        self.panel(g).select("professions")
+        r = self.row(g, "Next: You carry 13 Wool Cloth")
+        r.scripts.OnEnter(r)
+        self.assertEqual(to_py(g.lua.globals().GameTooltip.lines)[0], "Next: " + LONG_NEXT)
+        r.scripts.OnLeave(r)
+
+    def test_full_text_comes_before_the_details(self):
+        plan = self.plan()
+        plan["characters"]["Testchar"]["professions"]["First Aid"]["source"] = "fsrc"
+        g = self.game(data_source=data_file(plan))
+        self.open(g)
+        self.panel(g).select("professions")
+        r = self.row(g, "Next: You carry 13 Wool Cloth")
+        r.scripts.OnClick(r)
+        r = self.row(g, "Next: You carry 13 Wool Cloth")
+        self.assertEqual(r.sub.text, "Next: " + LONG_NEXT + "\nSource: Forever site: page")
+
+    def test_short_line_without_details_does_not_open(self):
+        g = self.game(data_source=data_file(self.plan()))
+        self.open(g)
+        r = self.row(g, "11. Hearth home")
+        self.assertFalse(r.arrow.shown)
+        r.scripts.OnClick(r)
+        self.assertFalse(self.row(g, "11. Hearth home").sub.shown)
+
