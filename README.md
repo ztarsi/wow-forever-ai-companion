@@ -1,3 +1,5 @@
+<p align="center"><img src="media/logo-400.png" width="160" alt="AI Companion logo: an open book under a guiding spark"></p>
+
 # AI Companion for World of Warcraft: Forever
 
 An add-on that saves a snapshot of your character (gear, bags, quests, professions, location, auction prices) to a file on your PC, so an AI assistant can act as your playing companion: what to do next, what to do with each item, what to buy. The advice then shows up in the game, in item tooltips.
@@ -117,7 +119,7 @@ Keep your private `plans.json` in one persistent folder outside this repository,
 | `/aic feedback` | Report a problem or share an idea, in a small window. Also the Feedback button on the panel. Your companion files it on GitHub after your next `/aic save`. `/aic bug <text>` and `/aic idea <text>` do it in one line. |
 | `/aic panel` | Open your companion panel: this character's plan, inside the game. Also the book button on the minimap (drag it to move it). |
 | `/aic reminder on` / `off` | After `/aic save`, remind me when new advice may be ready, with a "Load new advice" button in the panel. On automatically if you use automatic updates. |
-| Key binding | Choose a key for the panel in the game's Key Bindings screen, under AddOns > AI Companion. |
+| Key binding | Choose a key for the panel in the game's Key Bindings screen: under AddOns, the line "AI Companion: open or close the panel". |
 | `/aic copy` | Show a text summary you can copy and paste. |
 | `/aic help` | All commands. |
 
@@ -154,6 +156,7 @@ Auction 7c (2653 listed, 34m ago)          vendor 1c
 | `companion/CODEX_GUIDE.md` | Optional Codex / ChatGPT setup and starting prompts. Points to `SKILL.md`. |
 | `companion/` | Tools the assistant uses: `gen_data.py` (writes the data add-on from a plan file), `build.py` and `template.html` (dashboard), `plans.example.json` (plan file format). |
 | `companion/auto/` | Optional automatic updates with Claude Code or Codex CLI: shared checking/publishing, separate provider adapters and Windows/macOS schedulers. |
+| `media/` | The logo: `logo.svg` (source), PNGs at 400, 512 and 1024 pixels (400 for CurseForge), and `social-preview.png` (1280 × 640) for GitHub's link preview. Not installed. |
 | `FOREVER_INTERFACE` | The game version the add-on supports, set in this one place. `tools/set_interface.py` copies it into the other files. |
 | `tests/` | Automated checks: the add-on run inside a stand-in game client. Run on every change. |
 

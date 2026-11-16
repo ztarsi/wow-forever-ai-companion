@@ -416,6 +416,9 @@ function Panel.footer(takenAtText, asOf, today)
     return table.concat(parts, DOT)
 end
 
+-- Used only when the client cannot say whether a line was cut off (no FontString:IsTruncated).
+local TITLE_PX_PER_CHAR = 10
+
 local function textHeight(fs, default)
     local h = fs.GetStringHeight and fs:GetStringHeight()
     return (type(h) == "number" and h > 0) and h or default
@@ -481,17 +484,33 @@ local function layout(rows, width, ticks)
         local x = MARGIN
         local step = r.style == "step"
         f.bg:SetShown(r.isNext == true)
-        f.hl:SetShown(step and r.expandable == true)
         f.line:Hide()
+        -- A step title is one line. One too long for it is cut off by the game, so such a row
+        -- always opens on click, with the whole title first, and shows it in full on hover.
+        local cut = false
+        if step and type(r.text) == "string" then
+            f.title:SetFontObject(FONT_TITLE)
+            f.title:SetWordWrap(false)
+            f.title:SetWidth(width - x - (r.check and 28 or 0) - MARGIN - 20 - (r.isNext and 40 or 0))
+            f.title:SetText(r.text)
+            local ok, truncated = pcall(function() return f.title:IsTruncated() end)
+            if ok and type(truncated) == "boolean" then cut = truncated
+            else cut = #r.text * TITLE_PX_PER_CHAR > (f.title:GetWidth() or width) end
+        end
+        local expandable = r.expandable or cut
+        f.hl:SetShown(step and expandable == true)
+        local open = expandable and expanded == r.key
+        local sub = r.sub
+        if open and cut then sub = sub and (r.text .. "\n" .. sub) or r.text end
         -- expand arrow on the right, so it is clear the row opens: right when closed, down when open
         local right = MARGIN
-        if step and r.expandable then
+        if step and expandable then
             f.arrow:ClearAllPoints()
             f.arrow:SetPoint("TOPRIGHT", f, "TOPRIGHT", -MARGIN, -7)
             local art
             for _, path in ipairs(ARROWS) do if hasFile(path) then art = path break end end
             if art then f.arrow:SetTexture(art) else f.arrow:SetColorTexture(1, 1, 1, 0.4) end
-            f.arrow:SetRotation(r.sub ~= nil and -math.pi / 2 or 0)
+            f.arrow:SetRotation(sub ~= nil and -math.pi / 2 or 0)
             f.arrow:Show()
             right = right + 20
         else
@@ -541,11 +560,11 @@ local function layout(rows, width, ticks)
             f.line:SetPoint("RIGHT", f, "RIGHT", -MARGIN, 0)
             f.line:Show()
         end
-        if r.sub then
+        if sub then
             f.sub:ClearAllPoints()
             f.sub:SetPoint("TOPLEFT", f, "TOPLEFT", x + 8, -h)    -- indented under the title
             f.sub:SetWidth(width - x - 8 - MARGIN)
-            f.sub:SetText(r.sub)
+            f.sub:SetText(sub)
             f.sub:Show()
             h = h + textHeight(f.sub, 14) + 8
         else
@@ -553,10 +572,17 @@ local function layout(rows, width, ticks)
         end
         f:SetHeight(h)
         f:SetScript("OnClick", function()
-            if not r.expandable then return end
+            if not expandable then return end
             expanded = (expanded ~= r.key) and r.key or nil   -- one step open at a time
             render()
         end)
+        f:SetScript("OnEnter", function(self)
+            if not cut or not GameTooltip then return end
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(r.text, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        f:SetScript("OnLeave", function() if cut and GameTooltip then GameTooltip:Hide() end end)
         f:Show()
         y = y + h + 2
     end
@@ -850,10 +876,11 @@ function Panel.toggle()
 end
 Panel.isShown = function() return frame ~= nil and frame:IsShown() end
 
--- Key binding (Bindings.xml): Key Bindings > AddOns > AI Companion > "Open or close the panel".
+-- Key binding (Bindings.xml): Key Bindings > AddOns > "AI Companion: open or close the panel".
+-- The add-on's name is in the line itself: the game showed no heading above it (16 Nov).
 -- The labels are globals the Key Bindings screen reads; the binding calls the function below.
 BINDING_HEADER_AICOMPANION = "AI Companion"
-BINDING_NAME_AICOMPANION_TOGGLE_PANEL = "Open or close the panel"
+BINDING_NAME_AICOMPANION_TOGGLE_PANEL = "AI Companion: open or close the panel"
 function AICompanion_TogglePanel()
     local ok, err = pcall(Panel.toggle)
     if not ok then say("could not open the panel: " .. tostring(err)) end
