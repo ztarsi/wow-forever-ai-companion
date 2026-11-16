@@ -895,6 +895,7 @@ local function firstFile(list)
     return nil
 end
 
+Panel.LOGO = "Interface\\AddOns\\AICompanion\\media\\minimap"
 Panel.ICONS = { "Interface\\Icons\\INV_Misc_Book_09", "Interface\\Icons\\INV_Misc_Book_11",
                 "Interface\\Icons\\INV_Scroll_03", "Interface\\Icons\\INV_Misc_Note_01" }
 local RING = "Interface\\Minimap\\MiniMap-TrackingBorder"
@@ -940,9 +941,16 @@ local function buildButton()
     local icon = b:CreateTexture(nil, "ARTWORK")
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER")
-    local iconFile = firstFile(Panel.ICONS)
-    icon:SetTexture(iconFile or Panel.ICONS[1])
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    -- The AI Companion logo (media/minimap.tga, a 64 x 64 TGA in the add-on's own folder). The game
+    -- only sees a new add-on file after a full restart; until then SetTexture fails and a book stands in.
+    local iconFile
+    if icon:SetTexture(Panel.LOGO) ~= false then
+        iconFile = Panel.LOGO
+    else
+        iconFile = firstFile(Panel.ICONS) or Panel.ICONS[1]
+        icon:SetTexture(iconFile)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)          -- trim the game icon's own border
+    end
     if b.CreateMaskTexture and icon.AddMaskTexture then      -- clip the square icon to a circle
         local mask = b:CreateMaskTexture()
         mask:SetTexture(ROUND_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
@@ -963,7 +971,7 @@ local function buildButton()
         b.art.ring = RING_ATLAS
     end
     b:SetHighlightTexture(HIGHLIGHT, "ADD")
-    b.art.icon, b.icon = iconFile or Panel.ICONS[1], icon
+    b.art.icon, b.icon = iconFile, icon
     -- pressed: the icon shifts slightly, as game buttons do
     b:SetScript("OnMouseDown", function() icon:ClearAllPoints() icon:SetPoint("CENTER", 1, -1) end)
     b:SetScript("OnMouseUp", function() icon:ClearAllPoints() icon:SetPoint("CENTER") end)

@@ -174,7 +174,12 @@ function Widget:CreateFontString(name, layer, font) return region("FontString", 
 function Widget:CreateTexture(name, layer) return region("Texture", self, layer) end
 function Widget:CreateMaskTexture() return region("MaskTexture", self) end
 function Widget:SetFontObject(font) self.font = font end
-function Widget:SetTexture(t) self.texture = t return true end
+-- Like the client: false when the file is not there (a new add-on file needs a full restart).
+function Widget:SetTexture(t)
+    if type(t) == "string" and (W.missingFiles or {})[t] then return false end
+    self.texture = t
+    return true
+end
 function Widget:SetAtlas(a) self.atlas = a return true end
 function Widget:GetTexture() return rawget(self, "texture") end
 function Widget:AddMaskTexture(m) self.mask = m end

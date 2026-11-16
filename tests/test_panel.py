@@ -473,14 +473,32 @@ class RoundButton(PanelTest):
         art = self.art(g)
         self.assertEqual(art["ring"], "Interface\\Minimap\\MiniMap-TrackingBorder")
         self.assertEqual(art["mask"], "Interface\\CharacterFrame\\TempPortraitAlphaMask")
-        self.assertEqual(art["icon"], "Interface\\Icons\\INV_Misc_Book_09")
+        self.assertEqual(art["icon"], "Interface\\AddOns\\AICompanion\\media\\minimap")   # the AI Companion logo
         b = g.lua.globals().AICompanionMinimapButton
         self.assertEqual(b.highlightTexture, "Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
         self.assertEqual((b.width, b.height), (31, 31))
 
+    def test_logo_not_loaded_falls_back_to_the_book(self):
+        """A new file is only seen after a full restart; until then the book icon stands in."""
+        w = W.world()
+        w["missingFiles"] = {"Interface\\AddOns\\AICompanion\\media\\minimap": True}
+        g = self.game(w, data_source=data_file())
+        self.assertEqual(self.art(g)["icon"], "Interface\\Icons\\INV_Misc_Book_09")
+
+    def test_logo_file_is_one_the_game_can_load(self):
+        path = os.path.join(ROOT, "AddOns", "AICompanion", "media", "minimap.tga")
+        with open(path, "rb") as f:
+            head = f.read(18)
+        width, height = head[12] | head[13] << 8, head[14] | head[15] << 8
+        self.assertEqual(head[2], 2, "uncompressed true-colour TGA")
+        self.assertEqual(head[16], 32, "32 bits per pixel, with transparency")
+        self.assertEqual((width, height), (64, 64))
+        self.assertEqual(width & (width - 1), 0, "power-of-two size")
+
     def test_missing_icon_falls_back_to_a_real_one(self):
         w = W.world()
-        w["missingFiles"] = {"Interface\\Icons\\INV_Misc_Book_09": True}
+        w["missingFiles"] = {"Interface\\AddOns\\AICompanion\\media\\minimap": True,
+                             "Interface\\Icons\\INV_Misc_Book_09": True}
         g = self.game(w, data_source=data_file())
         self.assertEqual(self.art(g)["icon"], "Interface\\Icons\\INV_Misc_Book_11")
 
