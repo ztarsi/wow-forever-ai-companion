@@ -5,7 +5,7 @@
 
 local ADDON_NAME, ns = ...
 ns = type(ns) == "table" and ns or {}
-local VERSION = "0.13.3"
+local VERSION = "0.13.4"
 local PREFIX = "|cff66ccffAI Companion|r: "
 
 local DB            -- AICompanionDB once loaded
@@ -826,6 +826,29 @@ local function captureTrainer()
         return
     end
     if n == 0 then return end
+    -- The hunter's Beast Training uses the trainer window too (issue #46). The game says which kind
+    -- of trainer window is open (Enum.TrainerType: Pet = 3 in Forever); its costs are training points.
+    local PET = (Enum and Enum.TrainerType and Enum.TrainerType.Pet) or 3
+    local kind = C_Trainer and try(C_Trainer.GetTrainerType)
+    if kind == PET then
+        local abilities = {}
+        for i = 1, n do
+            local name, rank, status = try(GetTrainerServiceInfo, i)
+            if type(name) == "string" then
+                abilities[#abilities + 1] = { name = name, rank = rank, status = status,
+                    cost = (try(GetTrainerServiceCost, i)), level = try(GetTrainerServiceLevelReq, i) }
+            end
+        end
+        local total, used
+        if C_PetInfo then total, used = try(C_PetInfo.GetPetTrainingPoints) end
+        local pt = { seenAtText = date("%Y-%m-%d %H:%M:%S"), costIn = "training points",
+                     pet = try(UnitExists, "pet") and try(UnitName, "pet") or nil, abilities = abilities }
+        if type(total) == "number" and type(used) == "number" and not isSecret(total) and not isSecret(used) then
+            pt.pointsTotal, pt.pointsUsed, pt.pointsAvailable = total, used, total - used
+        end
+        charStore().petTraining = clean(pt)
+        return
+    end
     local list = {}
     for i = 1, n do
         local info = pack(try(GetTrainerServiceInfo, i))
@@ -840,7 +863,8 @@ local function captureTrainer()
     end
     local store = charStore()
     store.trainers = store.trainers or {}
-    local who = try(UnitName, "npc") or try(UnitName, "target") or "Unknown trainer"
+    -- Only the NPC being spoken to names a trainer; never whoever happens to be targeted (issue #46).
+    local who = try(UnitExists, "npc") and try(UnitName, "npc") or "Unknown trainer"
     if isSecret(who) then who = "Unknown trainer" end
     store.trainers[who] = { seenAtText = date("%Y-%m-%d %H:%M:%S"), zone = try(GetRealZoneText), services = clean(list) }
 end

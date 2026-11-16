@@ -457,6 +457,7 @@ function UnitName(unit)
     if unit == "player" then return C.name end
     if unit == "npc" then return W.npc end
     if unit == "target" then return W.target end
+    if unit == "pet" then return W.pet end
 end
 function UnitFullName(unit) if unit == "player" then return C.name, C.realm end end
 function GetRealmName() return C.realm end
@@ -470,7 +471,10 @@ function UnitXPMax() return C.xpMax or 1000 end
 function GetXPExhaustion() return C.rested end
 function IsResting() return C.resting == true end
 function GetMoney() if unloaded() then return 0 end return C.money or 0 end
-function UnitExists(unit) return unit == "player" end
+function UnitExists(unit)
+    return unit == "player" or (unit == "npc" and W.npc ~= nil) or (unit == "pet" and W.pet ~= nil)
+         or (unit == "target" and W.target ~= nil)
+end
 function UnitIsDeadOrGhost() return false end
 function GetRealZoneText() return W.zone end
 function GetZoneText() return W.zone end
@@ -698,6 +702,23 @@ C_SuperTrack = {
 }
 C_Map = C_Map or {}
 C_Map.GetBestMapForUnit = C_Map.GetBestMapForUnit or function() return W.mapID end
+
+-------------------------------------------------------------------------------
+-- Trainer window (only while open). W.trainerWindow = { type = TrainerType, services = {...} }.
+-- The hunter's Beast Training uses the same window with type 3 (Pet) and no NPC (issue #46).
+-------------------------------------------------------------------------------
+
+local function TW() return W.trainerWindow end
+function GetNumTrainerServices() return TW() and #TW().services or 0 end
+function GetTrainerServiceInfo(i)
+    local s = TW() and TW().services[i]
+    if s then return s.name, s.rank, s.category or "available", false end
+end
+function GetTrainerServiceCost(i) local s = TW() and TW().services[i] return s and s.cost end
+function GetTrainerServiceLevelReq(i) local s = TW() and TW().services[i] return s and s.level end
+function GetTrainerServiceSkillReq() return nil end
+C_Trainer = { GetTrainerType = function() return TW() and TW().type end }
+C_PetInfo = { GetPetTrainingPoints = function() if W.petTraining then return W.petTraining.total, W.petTraining.used end end }
 
 -------------------------------------------------------------------------------
 -- Trade skill window (only while open)

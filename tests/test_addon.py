@@ -941,6 +941,79 @@ class QuestTracker(GameTest):
         self.assertNotIn("superTracked", qw)
 
 
+PET_SERVICES = [
+    {"name": "Great Stamina", "rank": "Rank 2", "cost": 10, "level": 18},
+    {"name": "Growl", "rank": "Rank 3", "cost": 15, "level": 20, "category": "unavailable"},
+    {"name": "Natural Armor", "rank": "Rank 2", "cost": 5, "level": 16, "category": "used"},
+]
+
+
+class PetTraining(GameTest):
+    """Issue #46: the hunter's Beast Training window is not a trainer, and its costs are training points."""
+
+    def store(self, g):
+        return g.db()["characters"]["Testchar@Testrealm"]
+
+    def open_window(self, g, kind, services, npc=None):
+        g.set("npc", npc)
+        g.set("trainerWindow", {"type": kind, "services": services})
+        g.fire("TRAINER_SHOW")
+        g.advance(1)
+
+    def test_beast_training_after_a_vendor(self):
+        w = W.world()
+        w["pet"] = "Wolfie"
+        w["petTraining"] = {"total": 120, "used": 85}
+        w["target"] = "General Goods Vendor"        # still targeted after the vendor window
+        g = self.game(w)
+        g.set("npc", "General Goods Vendor")
+        g.fire("MERCHANT_SHOW")
+        g.advance(1)
+        g.fire("MERCHANT_CLOSED")
+        self.open_window(g, 3, PET_SERVICES)          # no NPC: opened from the spell book
+        st = self.store(g)
+        self.assertNotIn("General Goods Vendor", st.get("trainers") or {})
+        self.assertEqual(st.get("trainers") or {}, {})
+        pt = st["petTraining"]
+        self.assertEqual(pt["costIn"], "training points")
+        self.assertEqual((pt["pet"], pt["pointsTotal"], pt["pointsUsed"], pt["pointsAvailable"]), ("Wolfie", 120, 85, 35))
+        self.assertEqual([(a["name"], a["rank"], a["cost"], a["level"], a["status"]) for a in pt["abilities"]],
+                         [("Great Stamina", "Rank 2", 10, 18, "available"), ("Growl", "Rank 3", 15, 20, "unavailable"),
+                          ("Natural Armor", "Rank 2", 5, 16, "used")])
+        self.assertIn("seenAtText", pt)
+
+    def test_stale_npc_name_is_not_used(self):
+        w = W.world()
+        w["pet"] = "Wolfie"
+        g = self.game(w)
+        self.open_window(g, 3, PET_SERVICES, npc="General Goods Vendor")
+        self.assertEqual(self.store(g).get("trainers") or {}, {})
+        self.assertEqual(len(self.store(g)["petTraining"]["abilities"]), 3)
+
+    def test_a_real_trainer_is_still_recorded(self):
+        g = self.game()
+        self.open_window(g, 0, [{"name": "Arcane Shot", "rank": "Rank 2", "cost": 600, "level": 12}], npc="Hunter Trainer")
+        st = self.store(g)
+        self.assertIn("Hunter Trainer", st["trainers"])
+        self.assertNotIn("petTraining", st)
+
+    def test_no_trainer_name_from_the_target(self):
+        """With no NPC present and no trainer type, the window is not filed under whoever is targeted."""
+        w = W.world()
+        w["target"] = "General Goods Vendor"
+        g = self.game(w)
+        self.open_window(g, None, [{"name": "Something", "rank": "", "cost": 1, "level": 1}])
+        self.assertNotIn("General Goods Vendor", self.store(g).get("trainers") or {})
+
+    def test_reaches_disk(self):
+        w = W.world()
+        w["pet"] = "Wolfie"
+        g = self.game(w)
+        self.open_window(g, 3, PET_SERVICES)
+        g.slash("/aic save")
+        self.assertEqual(g.disk()["characters"]["Testchar@Testrealm"]["petTraining"]["costIn"], "training points")
+
+
 class WithoutDataFolder(GameTest):
     """Installing is one folder: AICompanion_Data appears only once the companion writes advice."""
 
