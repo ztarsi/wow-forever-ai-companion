@@ -113,6 +113,17 @@ class SkillFile(unittest.TestCase):
         loop = dict(self.sections)["Working loop"]
         self.assertIn("List every active quest with the place of its next objective before ordering (rule 10).", loop)
 
+    def test_look_it_up_do_not_guess(self):
+        """Issue #40: questions about how the game behaves are answered from sources, not guesses."""
+        rules = dict(self.sections)["Rules"]
+        titles = re.findall(r"^\d+\. \*\*(.+?)\*\*", rules, flags=re.M)
+        self.assertIn("Look it up; do not guess.", titles)
+        for needed in ("Warcraft Wiki API pages", "existing Forever add-ons", "\"Probably\" and \"most likely\"",
+                       "read-only recording in the snapshot", "evidence that it can be done in Forever"):
+            self.assertIn(needed, rules)
+        loop = dict(self.sections)["Working loop"]
+        self.assertIn("This applies to questions about the game's interface and functions as much as to quests and items", loop)
+
     def test_example_plan_groups_quests_by_area(self):
         import json
         with open(os.path.join(COMPANION, "plans.example.json"), encoding="utf-8") as f:
