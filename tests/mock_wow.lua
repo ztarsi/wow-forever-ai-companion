@@ -665,7 +665,39 @@ C_QuestLog = {
     GetAllCompletedQuestIDs = function() return W.completedQuests or {} end,
     GetTitleForQuestID = function(id) return (W.questTitles or {})[id] end,
     RequestLoadQuestByID = function() end,
+    -- The quest tracker (objectives at the right of the screen), in the order the game holds it.
+    GetNumQuestWatches = function() return #(W.questWatches or {}) end,
+    GetQuestIDForQuestWatchIndex = function(i) local w = (W.questWatches or {})[i] return w and w.id end,
+    GetDistanceSqToQuest = function(id)
+        for _, w in ipairs(W.questWatches or {}) do if w.id == id then return w.distSq, w.onContinent end end
+    end,
+    GetNextWaypoint = function(id)
+        for _, w in ipairs(W.questWatches or {}) do
+            if w.id == id and w.waypoint then return w.waypoint[1], w.waypoint[2], w.waypoint[3] end
+        end
+    end,
+    GetNextWaypointForMap = function(id, mapID)
+        local p = mapID == W.mapID and (W.waypointsForMap or {})[id]
+        if p then return p[1], p[2] end
+    end,
 }
+-- Changing the tracker is the player's business: the add-on only reads it (issue #39).
+M.trackerChanges = {}
+local function trackerChange(what)
+    return function(...)
+        M.trackerChanges[#M.trackerChanges + 1] = what
+        violation("add-on changed the quest tracker: " .. what)
+    end
+end
+C_QuestLog.SortQuestWatches = trackerChange("SortQuestWatches")
+C_QuestLog.AddQuestWatch = trackerChange("AddQuestWatch")
+C_QuestLog.RemoveQuestWatch = trackerChange("RemoveQuestWatch")
+C_SuperTrack = {
+    GetSuperTrackedQuestID = function() return W.superTracked end,
+    SetSuperTrackedQuestID = trackerChange("SetSuperTrackedQuestID"),
+}
+C_Map = C_Map or {}
+C_Map.GetBestMapForUnit = C_Map.GetBestMapForUnit or function() return W.mapID end
 
 -------------------------------------------------------------------------------
 -- Trade skill window (only while open)

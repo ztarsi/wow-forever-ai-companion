@@ -860,6 +860,87 @@ class Feedback(GameTest):
         self.assertIn('["20261116-101500-1"] = "#34"', text)
 
 
+def tracker_world():
+    """Two quests in the log, watched in the order 502 then 501, with 502 super-tracked."""
+    w = W.world()
+    w["quests"].append({"id": 502, "title": "Wolf Pelts", "level": 19, "complete": True, "objectives": []})
+    w["questTitles"][502] = "Wolf Pelts"
+    w["questTitles"][501] = "Boar Trouble"
+    w["questWatches"] = [
+        {"id": 502, "distSq": 1600.0, "onContinent": True, "waypoint": [1429, 0.4512, 0.6034]},
+        {"id": 501, "distSq": 90000.0, "onContinent": True},
+    ]
+    w["mapID"] = 1429
+    w["waypointsForMap"] = {501: [0.3301, 0.7744]}
+    w["superTracked"] = 502
+    return w
+
+
+class QuestTracker(GameTest):
+    """Issue #39: the quest tracker's order and distances, read only."""
+
+    def section(self, g):
+        return g.db()["characters"]["Testchar@Testrealm"]["snapshot"]["questWatches"]
+
+    def test_records_watches_in_the_games_order(self):
+        g = self.game(tracker_world())
+        g.slash("/aic")
+        qw = self.section(g)
+        self.assertTrue(qw["available"])
+        self.assertEqual(qw["count"], 2)
+        self.assertEqual(qw["superTracked"], 502)
+        first, second = qw["watches"]
+        self.assertEqual((first["index"], first["questID"], first["title"]), (1, 502, "Wolf Pelts"))
+        self.assertEqual((first["distanceSq"], first["onContinent"], first["complete"]), (1600.0, True, True))
+        self.assertEqual(first["waypoint"], {"mapID": 1429, "x": 45.1, "y": 60.3})
+        self.assertEqual((second["index"], second["questID"], second["complete"]), (2, 501, False))
+        self.assertEqual(second["waypoint"], {"mapID": 1429, "x": 33.0, "y": 77.4})   # from the current map
+
+    def test_reaches_disk(self):
+        g = self.game(tracker_world())
+        g.slash("/aic save")
+        snap = g.disk()["characters"]["Testchar@Testrealm"]["snapshot"]
+        self.assertEqual([w["questID"] for w in snap["questWatches"]["watches"]], [502, 501])
+
+    def test_never_changes_the_tracker(self):
+        g = self.game(tracker_world())
+        g.slash("/aic")
+        g.slash("/aic save")
+        self.assertEqual(to_py(g.M.trackerChanges) or [], [])
+
+    def test_client_without_the_functions(self):
+        g = Game(tracker_world())
+        g.lua_prelude = ("C_QuestLog.GetNumQuestWatches = nil C_QuestLog.GetQuestIDForQuestWatchIndex = nil "
+                         "C_QuestLog.GetDistanceSqToQuest = nil C_QuestLog.GetNextWaypoint = nil "
+                         "C_QuestLog.GetNextWaypointForMap = nil C_SuperTrack = nil")
+        self.games.append(g)
+        g.start()
+        g.slash("/aic")
+        self.assertEqual(self.section(g), {"available": False})
+        self.assertNotIn("questWatches", g.db()["characters"]["Testchar@Testrealm"]["snapshot"]["errors"] or {})
+
+    def test_a_failing_call_leaves_the_rest(self):
+        g = Game(tracker_world())
+        g.lua_prelude = "C_QuestLog.GetDistanceSqToQuest = function() error('not here') end C_QuestLog.GetNextWaypoint = nil"
+        self.games.append(g)
+        g.start()
+        g.slash("/aic")
+        first = self.section(g)["watches"][0]
+        self.assertEqual((first["questID"], first["title"]), (502, "Wolf Pelts"))
+        self.assertNotIn("distanceSq", first)
+        self.assertNotIn("waypoint", first)        # no waypoint function, and none for this map
+
+    def test_no_watches(self):
+        w = tracker_world()
+        w["questWatches"] = []
+        w.pop("superTracked")
+        g = self.game(w)
+        g.slash("/aic")
+        qw = self.section(g)
+        self.assertEqual((qw["available"], qw["count"]), (True, 0))
+        self.assertNotIn("superTracked", qw)
+
+
 class WithoutDataFolder(GameTest):
     """Installing is one folder: AICompanion_Data appears only once the companion writes advice."""
 

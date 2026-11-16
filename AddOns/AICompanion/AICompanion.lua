@@ -5,7 +5,7 @@
 
 local ADDON_NAME, ns = ...
 ns = type(ns) == "table" and ns or {}
-local VERSION = "0.13.2"
+local VERSION = "0.13.3"
 local PREFIX = "|cff66ccffAI Companion|r: "
 
 local DB            -- AICompanionDB once loaded
@@ -669,6 +669,48 @@ end
 
 local scanAuctionator -- defined with the auction code below
 
+-- The quest tracker (the objectives list at the right of the screen), read only (issue #39):
+-- the watched quests in the order the game holds them, how far each is, and its next waypoint.
+-- Never sorts, adds, removes or super-tracks anything, and never touches the tracker's frame.
+local function percent(v)
+    if type(v) == "number" and not isSecret(v) then return math.floor(v * 1000 + 0.5) / 10 end
+end
+
+local function scanQuestWatches()
+    local Q = C_QuestLog
+    if not (Q and type(Q.GetNumQuestWatches) == "function" and type(Q.GetQuestIDForQuestWatchIndex) == "function") then
+        return { available = false }
+    end
+    local n = try(Q.GetNumQuestWatches)
+    if type(n) ~= "number" or isSecret(n) then return { available = false } end
+    local out = { available = true, count = n, watches = {} }
+    local mapID = C_Map and try(C_Map.GetBestMapForUnit, "player")
+    for i = 1, n do
+        local id = try(Q.GetQuestIDForQuestWatchIndex, i)
+        local w = { index = i, questID = id }
+        if type(id) == "number" then
+            w.title = try(Q.GetTitleForQuestID, id)
+            w.complete = try(Q.IsComplete, id)
+            local d, onContinent = try(Q.GetDistanceSqToQuest, id)
+            if type(d) == "number" and not isSecret(d) then w.distanceSq = d end
+            if type(onContinent) == "boolean" then w.onContinent = onContinent end
+            local wm, wx, wy = try(Q.GetNextWaypoint, id)
+            if type(wm) == "number" and type(wx) == "number" then
+                w.waypoint = { mapID = wm, x = percent(wx), y = percent(wy) }
+            elseif mapID then
+                wx, wy = try(Q.GetNextWaypointForMap, id, mapID)
+                if type(wx) == "number" then w.waypoint = { mapID = mapID, x = percent(wx), y = percent(wy) } end
+            end
+        end
+        out.watches[#out.watches + 1] = w
+    end
+    if C_SuperTrack then
+        local st = try(C_SuperTrack.GetSuperTrackedQuestID)
+        if type(st) == "number" and st ~= 0 then out.superTracked = st end
+    end
+    return out
+end
+
 local SECTIONS = {
     { "client", scanClient },
     { "character", scanCharacter },
@@ -676,6 +718,7 @@ local SECTIONS = {
     { "equipment", scanEquipment },
     { "bags", scanBags },
     { "quests", scanQuests },
+    { "questWatches", scanQuestWatches },
     { "completedQuests", scanCompletedQuests },
     { "skills", scanSkills },
     { "spells", scanSpells },
