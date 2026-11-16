@@ -1068,5 +1068,94 @@ Auctionator = %s
         self.assertTrue(any("listed" in l for l in helm), helm)
 
 
+class ReloadReminder(GameTest):
+    """After /aic save, remind once (out of combat) that an automatic update may have new advice."""
+    AUTO = 'AICompanionAdvice = { characters = {} }\nAICompanionMeta = { automatic = true }\n'
+    MANUAL = 'AICompanionAdvice = { characters = {} }\nAICompanionMeta = { automatic = false }\n'
+    SAID = "may have new advice"
+
+    def reminded(self, g):
+        return any(self.SAID in l for l in g.chat())
+
+    def button(self, g):
+        g.slash("/aic panel")
+        return g.lua.globals().AICompanionPanel.reloadButton
+
+    def test_reminder_and_button_after_save_with_automatic_updates(self):
+        g = self.game(data_source=self.AUTO)
+        g.slash("/aic save")
+        g.advance(60)
+        self.assertFalse(self.reminded(g))                 # not yet
+        self.assertFalse(self.button(g).shown)
+        g.slash("/aic panel")
+        g.advance(70)
+        self.assertTrue(self.reminded(g))
+        b = self.button(g)
+        self.assertTrue(b.shown)
+        reloads = g.reloads
+        b.Click(b)                                         # the player's click reloads
+        self.assertTrue(g.M.reloadRequested)
+        self.assertEqual(g.reloads, reloads)               # nothing reloaded on its own before the click
+
+    def test_nothing_without_automatic_updates(self):
+        g = self.game(data_source=self.MANUAL)
+        g.slash("/aic save")
+        g.advance(200)
+        self.assertFalse(self.reminded(g))
+        self.assertFalse(self.button(g).shown)
+
+    def test_player_can_turn_it_on_or_off(self):
+        g = self.game(data_source=self.MANUAL)
+        g.slash("/aic reminder on")
+        g.slash("/aic save")
+        g.advance(200)
+        self.assertTrue(self.reminded(g))
+        g = self.game(data_source=self.AUTO)
+        g.slash("/aic reminder off")
+        g.slash("/aic save")
+        g.advance(200)
+        self.assertFalse(self.reminded(g))
+        g.slash("/aic reminder")
+        self.assertTrue(any("reminders to load new advice are off" in l for l in g.chat()))
+
+    def test_waits_until_combat_ends(self):
+        g = self.game(data_source=self.AUTO)
+        g.slash("/aic save")
+        g.set("inCombat", True)
+        g.advance(200)
+        self.assertFalse(self.reminded(g))
+        g.set("inCombat", False)
+        g.fire("PLAYER_REGEN_ENABLED")
+        self.assertTrue(self.reminded(g))
+
+    def test_only_after_aic_save_and_only_once(self):
+        g = self.game(data_source=self.AUTO)
+        g.reload()                                         # a plain /reload
+        g.advance(200)
+        self.assertFalse(self.reminded(g))
+        g.slash("/aic save")
+        g.advance(200)
+        self.assertTrue(self.reminded(g))
+        g.reload()                                         # the reminder belongs to that one save
+        g.advance(200)
+        self.assertFalse(self.reminded(g))
+
+    def test_generated_data_carries_the_automatic_mark(self):
+        d = tempfile.mkdtemp()
+        out = os.path.join(d, "AICompanion_Data", "AICompanion_Data.lua")
+        gen = [sys.executable, os.path.join(ROOT, "companion/gen_data.py"), os.path.join(ROOT, "companion/plans.example.json"), out]
+        subprocess.run(gen, check=True, capture_output=True)
+        self.assertIn("AICompanionMeta = { automatic = false", open(out, encoding="utf-8").read())
+        subprocess.run(gen + ["--automatic"], check=True, capture_output=True)
+        self.assertIn("AICompanionMeta = { automatic = true", open(out, encoding="utf-8").read())
+        subprocess.run(gen, check=True, capture_output=True)      # the companion writing by hand keeps it
+        data = open(out, encoding="utf-8").read()
+        self.assertIn("AICompanionMeta = { automatic = true", data)
+        g = self.game(data_source=data)
+        g.slash("/aic save")
+        g.advance(200)
+        self.assertTrue(self.reminded(g))
+
+
 if __name__ == "__main__":
     unittest.main()

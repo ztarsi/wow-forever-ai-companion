@@ -69,7 +69,7 @@ You need a Claude subscription and the Claude desktop app on the same computer a
 
 Claude reads your snapshot, researches Forever sources, and writes its advice into `AICompanion_Data`. Type `/reload` in the game to see it.
 
-**Optional: automatic updates.** With Claude Code installed (Pro or Max plan), your advice can update itself after you play, within a daily limit you set. Watching for changes costs nothing; only the update uses your plan. Double-click the installer for your system in `companion/auto/`. See [companion/auto/README.md](companion/auto/README.md).
+**Optional: automatic updates with Claude.** With Claude Code installed (Pro or Max plan), your advice can update itself after you play, within a daily limit you set. Double-click the standard installer for your system in `companion/auto/`. See [automatic updates](companion/auto/README.md#claude).
 
 ### Codex / ChatGPT
 
@@ -84,6 +84,8 @@ Use a local Codex app, CLI or IDE session with file and command tools. See [Open
 4. Type `/reload` when asked, or fully restart and enable "AI Companion Data" when the data add-on is first created or its `.toc` changes.
 
 In-game advice requires local file access on the game computer. A remote Codex checkout does not have your local game files. If local tools are unavailable, use the chat workflow below.
+
+**Optional: automatic updates with Codex.** With a signed-in Codex CLI and an existing private plan, double-click `Install-Codex-Windows.cmd` or `Install-Codex-Mac.command` in `companion/auto/`. It uses the shared watcher and explicitly selects Codex. Account/model access and usage limits apply; ordinary ChatGPT chat cannot run the watcher. See [Codex automation setup](companion/auto/README.md#codex--chatgpt).
 
 #### ChatGPT chat / Projects (advice in chat)
 
@@ -116,6 +118,7 @@ Keep your private `plans.json` in one persistent folder outside this repository,
 | `/aic sort` | Group your bags by what to do with each item: sell, auction, mail, bank, use, craft, quest, keep. |
 | `/aic feedback` | Report a problem or share an idea, in a small window. Also the Feedback button on the panel. Your companion files it on GitHub after your next `/aic save`. `/aic bug <text>` and `/aic idea <text>` do it in one line. |
 | `/aic panel` | Open your companion panel: this character's plan, inside the game. Also the book button on the minimap (drag it to move it). |
+| `/aic reminder on` / `off` | After `/aic save`, remind me when new advice may be ready, with a "Load new advice" button in the panel. On automatically if you use automatic updates. |
 | Key binding | Choose a key for the panel in the game's Key Bindings screen: under AddOns, the line "AI Companion: open or close the panel". |
 | `/aic copy` | Show a text summary you can copy and paste. |
 | `/aic help` | All commands. |
@@ -152,7 +155,7 @@ Auction 7c (2653 listed, 34m ago)          vendor 1c
 | `AGENTS.md` | Shared entry point for all agents, with common rules and separate provider-specific sections. |
 | `companion/CODEX_GUIDE.md` | Optional Codex / ChatGPT setup and starting prompts. Points to `SKILL.md`. |
 | `companion/` | Tools the assistant uses: `gen_data.py` (writes the data add-on from a plan file), `build.py` and `template.html` (dashboard), `plans.example.json` (plan file format). |
-| `companion/auto/` | Optional automatic updates with Claude Code, for Windows and macOS: double-click installers, the shared checking logic (`core.py`) and one scheduler file per system. |
+| `companion/auto/` | Optional automatic updates with Claude Code or Codex CLI: shared checking/publishing, separate provider adapters and Windows/macOS schedulers. |
 | `media/` | The logo: `logo.svg` (source), PNGs at 400, 512 and 1024 pixels (400 for CurseForge), and `social-preview.png` (1280 × 640) for GitHub's link preview. Not installed. |
 | `FOREVER_INTERFACE` | The game version the add-on supports, set in this one place. `tools/set_interface.py` copies it into the other files. |
 | `tests/` | Automated checks: the add-on run inside a stand-in game client. Run on every change. |
