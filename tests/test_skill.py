@@ -103,6 +103,24 @@ class SkillFile(unittest.TestCase):
         self.assertIn("/reload", loop)
         self.assertIn("full restart", loop)
 
+    def test_every_active_quest_is_placed_before_ordering(self):
+        """Issue #37: no active quest is left out because the plan grouped it elsewhere."""
+        rules = dict(self.sections)["Rules"]
+        rule10 = rules[rules.index("10. **Order steps"):rules.index("11. **")]
+        for needed in ("Place every active quest on the map before ordering", "`snapshot.quests`",
+                       "not from quest level", "`questing` groups are by place", "Before replying, check the count"):
+            self.assertIn(needed, rule10)
+        loop = dict(self.sections)["Working loop"]
+        self.assertIn("List every active quest with the place of its next objective before ordering (rule 10).", loop)
+
+    def test_example_plan_groups_quests_by_area(self):
+        import json
+        with open(os.path.join(COMPANION, "plans.example.json"), encoding="utf-8") as f:
+            plan = json.load(f)
+        for name, c in plan["characters"].items():
+            for g in c.get("questing", []):
+                self.assertRegex(g["title"], r"^(In|Around|At|Near) ", "%s: questing groups are titled by area" % name)
+
     def test_tools_it_names_travel_with_it(self):
         for name in ("gen_data.py", "build.py", "template.html", "plans.example.json"):
             self.assertIn("`%s`" % name, self.text)
