@@ -14,7 +14,7 @@
     { "id": "f-eat", "title": "Eat before the fight", "detail": "A step the snapshot cannot detect gets no done rule, so the page shows a tick box.", "tag": "judgment" }
    ],
    "questing": [
-    { "title": "Name of a questing stretch", "note": "Why this order.", "steps": [
+    { "title": "Around Zone Name (where these objectives are)", "note": "Quests here, in the order to do them. Any that wait say why: level, group or item.", "steps": [
       { "id": "f-q1", "title": "Quest name", "detail": "Where you go, with zone and coordinates (Zone Name 42.1, 65.9), and what you do there.", "tag": "lookup", "source": "example", "done": { "questDone": "Quest name" } }
     ] }
    ],
