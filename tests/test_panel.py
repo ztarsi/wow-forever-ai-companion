@@ -721,7 +721,8 @@ class KeyBinding(PanelTest):
         b = g.M.bindings[self.BINDING]
         self.assertEqual((b.header, b.category), ("AICOMPANION", "ADDONS"))
         self.assertEqual(g.lua.globals().BINDING_HEADER_AICOMPANION, "AI Companion")
-        self.assertEqual(g.lua.globals()["BINDING_NAME_" + self.BINDING], "Open or close the panel")
+        # The game may show no heading above an add-on's binding, so the line itself names the add-on.
+        self.assertEqual(g.lua.globals()["BINDING_NAME_" + self.BINDING], "AI Companion: open or close the panel")
 
     def test_key_opens_and_closes_the_panel(self):
         g = self.game(data_source=data_file())

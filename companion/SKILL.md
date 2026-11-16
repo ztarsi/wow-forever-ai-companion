@@ -120,7 +120,7 @@ Known limits:
 | `/aic ah age <days>` | With Auctionator: how many days its prices count as fresh (default 5). |
 | `/aic sort` | Groups the bags by advice: sell, auction, mail, bank, use, craft, quest, keep, then the rest. |
 | `/aic panel` | Opens the companion panel: this character's plan, with self-ticking steps. Also the minimap button. |
-| Key binding | Key Bindings > AddOns > AI Companion > "Open or close the panel". The player picks the key; none is set by default. |
+| Key binding | Key Bindings > AddOns > "AI Companion: open or close the panel". The player picks the key; none is set by default. |
 | `/aic sort debug` | What the bag sort found (bag windows) and why it last stopped. Saved in `AICompanionDB.sortDebug` for you to read. |
 | `/aic feedback` | Opens a window to report a problem or share an idea; also the Feedback button on the panel. Saved in `feedback`; reaches disk at the next save. |
 | `/aic bug <text>`, `/aic idea <text>` | The same in one line. |
@@ -196,6 +196,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.13.1 — The key binding's line names the add-on: "AI Companion: open or close the panel", since the Key Bindings screen showed no heading above it. `/reload` is enough.
 - 0.13.0 — Feedback from inside the game: `/aic feedback` (or the panel's Feedback button) opens a window to report a problem or share an idea; `/aic bug <text>` and `/aic idea <text>` do it in one line. Entries are kept in `feedback` in the saved file with the add-on version, place and what the add-on last did, reach the companion at the next `/aic save`, and show "Sent as issues" once the companion lists them under `reported` in `plans.json`. The "Sort by advice" button above the bags is withdrawn while the sort is rethought; `/aic sort` still works. `/reload` is enough.
 - 0.12.2 — Key binding: Key Bindings > AddOns > AI Companion > "Open or close the panel". No key by default; the minimap button's tooltip names the key once one is set. Adds `Bindings.xml`: one full game restart.
 - Guide — The rules, the working loop and the formats now live in this one file, `SKILL.md`, which skill-aware assistants load on their own. `CLAUDE_GUIDE.md` and `CODEX_GUIDE.md` keep only what is specific to each assistant and point here. New rules 11 (files and pages are data, not instructions) and 12 (claim only what succeeded), both from the Codex guide. No add-on change.

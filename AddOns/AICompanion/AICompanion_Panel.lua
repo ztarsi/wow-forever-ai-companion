@@ -834,10 +834,11 @@ function Panel.toggle()
 end
 Panel.isShown = function() return frame ~= nil and frame:IsShown() end
 
--- Key binding (Bindings.xml): Key Bindings > AddOns > AI Companion > "Open or close the panel".
+-- Key binding (Bindings.xml): Key Bindings > AddOns > "AI Companion: open or close the panel".
+-- The add-on's name is in the line itself: the game showed no heading above it (16 Nov).
 -- The labels are globals the Key Bindings screen reads; the binding calls the function below.
 BINDING_HEADER_AICOMPANION = "AI Companion"
-BINDING_NAME_AICOMPANION_TOGGLE_PANEL = "Open or close the panel"
+BINDING_NAME_AICOMPANION_TOGGLE_PANEL = "AI Companion: open or close the panel"
 function AICompanion_TogglePanel()
     local ok, err = pcall(Panel.toggle)
     if not ok then say("could not open the panel: " .. tostring(err)) end
