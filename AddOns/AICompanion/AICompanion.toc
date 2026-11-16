@@ -2,7 +2,7 @@
 ## Title: AI Companion
 ## Notes: Saves a snapshot of your character (gear, bags, quests, skills, location) so an AI companion can read it and advise you. Type /aic for help.
 ## Author: Ziv Tarsi and Claude
-## Version: 0.14.4
+## Version: 0.14.5
 ## SavedVariables: AICompanionDB
 ## OptionalDeps: AICompanion_Data, Auctionator
 

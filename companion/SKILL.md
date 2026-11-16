@@ -261,6 +261,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.14.5 — The minimap button shows the AI Companion logo (an open book under a spark) inside the standard gold ring. It adds a file, `media/minimap.tga`, so it needs one full game restart; until then the button keeps the book icon.
 - 0.14.4 — The hunter's Beast Training window is recorded on its own, in `petTraining`, with costs marked as training points and the pet's points; it no longer lands in `trainers` under the last vendor's name. A trainer is named only after the NPC being spoken to, never the target. `/reload` is enough.
 - Guide — Rule 13, look it up, do not guess: questions about how the game, its interface or its functions behave are answered from searched sources, named and labelled; "probably" only after a search, with what was searched; if nothing is documented, say so and how to find out. No add-on change.
 - 0.14.3 — Snapshots record the quest tracker, read only, in `questWatches`: the watched quests in the game's order, each with its distance, next waypoint and whether it is complete, and the quest the game points to. Nothing on screen changes. `/reload` is enough.
