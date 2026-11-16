@@ -103,7 +103,8 @@ AICompanionDB
   characters["<Name>@<Realm>"]
     snapshot      latest snapshot (below)
     bank          { seenAtText, bags[] }            recorded when the bank is opened
-    trainers      recorded when a trainer window is opened
+    trainers      recorded when a trainer window is opened, keyed by the trainer NPC's name ("Unknown trainer" when no NPC was present)
+    petTraining   recorded when a hunter opens Beast Training: { seenAtText, costIn = "training points", pet, pointsTotal, pointsUsed, pointsAvailable, abilities[] { name, rank, status, cost, level } }. `status` is the game's own word: available, unavailable or used. Costs are training points, never copper. Tell the player which abilities they can teach now with the points they have.
     merchants     recorded when a vendor window is opened
     flightPaths   recorded when a flight master is opened
     recipes["<Profession>"]  { seenAtText, recipes[] }   recorded when the profession window is opened
@@ -260,6 +261,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.14.4 — The hunter's Beast Training window is recorded on its own, in `petTraining`, with costs marked as training points and the pet's points; it no longer lands in `trainers` under the last vendor's name. A trainer is named only after the NPC being spoken to, never the target. `/reload` is enough.
 - Guide — Rule 13, look it up, do not guess: questions about how the game, its interface or its functions behave are answered from searched sources, named and labelled; "probably" only after a search, with what was searched; if nothing is documented, say so and how to find out. No add-on change.
 - 0.14.3 — Snapshots record the quest tracker, read only, in `questWatches`: the watched quests in the game's order, each with its distance, next waypoint and whether it is complete, and the quest the game points to. Nothing on screen changes. `/reload` is enough.
 - Guide — Rule 10: place every active quest on the map before ordering; decide from that list, not from quest level or the old grouping; `questing` groups are named by area; check before replying that every active quest is in `next` or waits in a group with a reason. No add-on change.
