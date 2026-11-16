@@ -1,12 +1,19 @@
 """Writes the AICompanion_Data add-on file (shopping lists, per-item advice and the plan shown in
 the in-game panel) from the plan file.
-Usage: python3 gen_data.py plans.json <path to AICompanion_Data.lua>
+Usage: python3 gen_data.py plans.json <path to AICompanion_Data.lua> [--automatic]
+--automatic marks the data as written by an automatic update (companion/auto). The mark stays on
+later runs without the flag, and turns on the add-on's "load new advice" reminder by default.
 The AICompanion_Data folder is not part of installing the add-on. If the folder or its .toc is
 missing, this creates them and says so: a new folder needs a full game restart, once.
 The data add-on's "## Interface:" always follows the installed AICompanion release's .toc, never
 the game's own version: supporting a new game version is a tested add-on release."""
 import json, sys, datetime, os, re
-plans, target = sys.argv[1], sys.argv[2]
+args = [a for a in sys.argv[1:] if a != "--automatic"]
+plans, target = args[0], args[1]
+# Automatic once means the player uses automatic updates; keep that when the companion writes by hand.
+automatic = "--automatic" in sys.argv[1:]
+if not automatic and os.path.exists(target):
+    automatic = re.search(r"^AICompanionMeta = \{[^}]*\bautomatic = true", open(target, encoding="utf-8").read(), re.M) is not None
 # The template's text, with the interface number filled in (a test checks it matches the repository's).
 TOC = """## Interface: {interface}
 ## Title: AI Companion Data
@@ -82,7 +89,10 @@ out += ["AICompanionPlans = {",
         "    sources = %s," % lua(d.get("sources") or {}, "    "),
         "    characters = %s," % lua(plans, "    "),
         "    reported = %s," % lua(reported, "    "),
-        "}", ""]
+        "}", "",
+        "-- How this file was written. automatic = true: the player uses automatic updates.",
+        "AICompanionMeta = { automatic = %s, writtenAt = %d }" % ("true" if automatic else "false", int(datetime.datetime.now().timestamp())),
+        ""]
 folder = os.path.dirname(os.path.abspath(target))
 interface, interface_from = addon_interface(folder)
 restart = None

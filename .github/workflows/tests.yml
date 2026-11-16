@@ -26,6 +26,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install lupa
-      - run: python -m unittest discover -s tests -p "test_auto.py" -v
+      - run: python -m unittest discover -s tests -p "test_auto*.py" -v
         env:
           AIC_TEST_LAUNCHD: "1"

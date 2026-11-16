@@ -16,3 +16,5 @@ AICompanionPlans = {
     characters = {
     },
 }
+
+AICompanionMeta = { automatic = false }
