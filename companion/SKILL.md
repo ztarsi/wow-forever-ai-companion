@@ -36,7 +36,7 @@ This file is the whole guide. The scripts it names sit in the same folder: `gen_
 Run this loop at the first session, whenever the player says "refresh" after `/aic save`, and whenever they ask what to do.
 
 1. **Read the save.** Parse the SavedVariables file (see "Files" and "Snapshot format"). Note the file's modified time and each snapshot's `takenAtText`, and state the data's age when it matters. Read `questions` (left with `/aic ask`) and `blockedActions` (report any entry as an issue). **Check `feedback` first:** the player may have reported a problem or an idea in the game. File every entry not yet filed (see "Reporting problems and requests") before advising, and say in your reply which issues you filed.
-2. **Research.** Look up Forever sources for the character's level, zone, quests, professions and gear. Label every source (rule 3). Find coordinates for every place (rule 9). If you cannot browse, mark what you could not check as `unverified`.
+2. **Research.** Look up Forever sources for the character's level, zone, quests, professions and gear. Label every source (rule 3). Find coordinates for every place (rule 9). For a profession, go through "Professions" below. If you cannot browse, mark what you could not check as `unverified`.
 3. **Write `plans.json`.** Keep one plan file per player in a private folder outside any repository, where it persists between sessions. Read the existing file first and update it: keep every other character, every source entry, and every existing step ID. Never write a plan from the current character alone and drop the rest. Order `next` from where the player stands (rule 10). Format: "Plan file" below and `plans.example.json`. If the player uses automatic updates (the `auto` folder beside this file), an unattended run may also change `plans.json` and the data file: before you change `plans.json`, check that `.automation-running` is not in the plan file's folder (wait until it is gone), and re-read `plans.json` right before writing.
 4. **Generate.** `python3 gen_data.py "<private folder>/plans.json" "<game>/Interface/AddOns/AICompanion_Data/AICompanion_Data.lua"`. It refuses tips over 48 characters; shorten and run it again.
 5. **Verify the write.** Read the file back and compare it byte for byte with what you meant to write. If you write through a staging bridge, wait about 20 seconds after your last edit before copying.
@@ -127,6 +127,52 @@ Known limits:
 | `/aic copy` | Text summary the player can paste into chat. |
 | `/aic help` | Command list. |
 
+### Professions
+
+Go through this list whenever you advise on a profession. Each point is labelled **[F]** (from a source written for Forever) or **[O]** (original game, unconfirmed for Forever). Most Forever sources are fan guides written during the beta (patch 1.60.1): treat their numbers as provisional and say so. The snapshot's `trainers` and `recipes` win over every source (rule 2). Look up coordinates for every NPC named here (rule 9).
+
+What to check:
+- **Rank caps and gates.** Apprentice 75, Journeyman 150 (skill 50, level 10), Expert 225 (skill 125, level 20), Artisan 300 (skill 200, level 35) for crafting; gathering ranks open at lower levels, and sources disagree on which [F]. Warn the player before a cap stops their skill-ups.
+- **Ranks not taught by a trainer** [F, beta guides]:
+  - First Aid: Expert from the book "Expert First Aid - Under Wraps" (Deneb Walker, Arathi Highlands; Balai Lok'Wein, Dustwallow Marsh); Artisan from the quest "Triage" (Theramore or Hammerfall). One guide calls the Artisan step unconfirmed.
+  - Fishing: Expert from the book "Expert Fishing - The Bass and You" (Old Man Heming, Booty Bay); Artisan from the quest "Nat Pagle, Angler Extreme" (Nat Pagle, Dustwallow Marsh 58.6, 60.0).
+  - Cooking: Expert from the Expert Cookbook (Shandrina, Ashenvale; Wulan, Shadowprey Village, Desolace; sources disagree on Shandrina's spot); Artisan from the quest "Clamlette Surprise".
+- **Specialisations.** Say what a choice costs to change before recommending it.
+  - Engineering: Gnomish or Goblin at level 30 and skill 200, by a quest chain from an Engineering trainer [F].
+  - Leatherworking: Dragonscale, Elemental or Tribal at skill 225 [F]; level 40 and the quest givers [O].
+  - Blacksmithing: Armorsmith or Weaponsmith at level 40 and skill 200; axe, hammer and sword sub-specialisations at level 50 and skill 250, in Everlook [O].
+- **Two primary professions**, plus Cooking, First Aid and Fishing for everyone. No Jewelcrafting [F].
+- **What Forever changed** [F]:
+  - First Aid makes healing potions; Alchemy no longer does.
+  - Camping: three camp objects per profession. The first comes from the trainer's quest "Camping 101: <profession>" at skill 20; the others from Blueprints (skill 140 and 300) dropped in dungeons and raids. All camp features share one one-hour cooldown.
+  - Quests in the starting zones give manuals that teach a gathering profession without a trainer.
+  - The Legacy Professions tree: points earned for the account, spent per character (for example "Working Overtime", +4% skill-up chance per rank).
+  - More than 600 new recipes; recipe colours run past 300 although the cap is 300.
+  - The Azeroth Commerce Authority (Alliance) and Durotar Supply and Logistics (Horde) sell recipes for Merchant's Favor; the best need Honored.
+  - A title at 300 ("the Engineer").
+- **Cooldown crafts.** Transmutes, including the Forever-only Transmute: Legionite (47 hours) [F]. Salt Shaker and Mooncloth [O].
+- **Skill-up colours.** Orange always gives a point, yellow usually, green sometimes, grey never [O, same model in Forever databases]. The snapshot's recipe `difficulty` likely maps to these (see "Snapshot format").
+- **Reputation recipes** from the Thorium Brotherhood, Cenarion Circle and Zandalar Tribe [O].
+
+Where to look, Forever first:
+- Blizzard's Forever deep dive (camping, Blueprints): https://worldofwarcraft.blizzard.com/news/24303313
+- Wowhead Forever leveling guides and quests: https://www.wowhead.com/forever/profession-leveling-guides/cooking (same path for each profession)
+- Icy Veins: https://www.icy-veins.com/wow-forever/professions-overview (and a page per profession); the Legacy system: https://www.icy-veins.com/wow-forever/news/everything-on-the-wow-forever-legacy-system-account-wide-progression/
+- Warcraft Tavern: https://www.warcrafttavern.com/forever/guides/professions/ (also profession-trainers and camping-objects-buffs)
+- wow-professions.com: https://www.wow-professions.com/forever/ (trainers, First Aid trainers, Gnomish or Goblin, camping, Nat Pagle)
+- Recipes with skill colours, reagents and sources: https://conquestcapped.com/guides/wow-forever/wow-forever-recipes/
+- Merchant's Favor: https://wow.gg/guides/merchants-favor and https://warcraft.wiki.gg/wiki/Merchant's_Favor
+- Everything Forever added, on the wiki: https://warcraft.wiki.gg/wiki/Category:Content_added_by_a_Forever_patch
+
+Original game, when Forever has nothing:
+- Specialisations: https://warcraft.wiki.gg/wiki/Leatherworking_specialization, https://warcraft.wiki.gg/wiki/Blacksmithing_specialization, https://warcraft.wiki.gg/wiki/Gnomish_Engineering, https://warcraft.wiki.gg/wiki/Goblin_engineering
+- First Aid: https://warcraft.wiki.gg/wiki/Expert_First_Aid_-_Under_Wraps, https://warcraft.wiki.gg/wiki/Triage/Artisan_First_Aid_quest_guide
+- Skill-up colours: https://warcraft.wiki.gg/wiki/Skill_up
+- Reputation recipes: https://warcraft.wiki.gg/wiki/Classic_reputation_rewards
+- Changing a specialisation: https://us.support.blizzard.com/en/article/248671
+
+Not yet confirmed for Forever; look again before relying on them: the gathering level gates, the Leatherworking specialisation NPCs and level, whether Blacksmithing specialisations exist, unlearning rules and costs, cooldown lengths other than Legionite, the original reputation recipes, and which bosses drop which Blueprints.
+
 ### Writing advice into the game
 
 `gen_data.py` turns `plans.json` into the data add-on (working loop, step 4).
@@ -196,6 +242,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- Guide — "Professions": what to check for every profession (rank caps and gates, ranks learned from books and quests, specialisations, what Forever changed, cooldowns, skill-up colours, reputation recipes), each labelled Forever or original game, with links to where the details live. No add-on change.
 - 0.13.2 — A panel line too long for its row is never lost: it gets the arrow, opens on click with the whole line first, and shows in full when the pointer rests on it. `/reload` is enough.
 - 0.13.1 — The key binding's line names the add-on: "AI Companion: open or close the panel", since the Key Bindings screen showed no heading above it. `/reload` is enough.
 - 0.13.0 — Feedback from inside the game: `/aic feedback` (or the panel's Feedback button) opens a window to report a problem or share an idea; `/aic bug <text>` and `/aic idea <text>` do it in one line. Entries are kept in `feedback` in the saved file with the add-on version, place and what the add-on last did, reach the companion at the next `/aic save`, and show "Sent as issues" once the companion lists them under `reported` in `plans.json`. The "Sort by advice" button above the bags is withdrawn while the sort is rethought; `/aic sort` still works. `/reload` is enough.
