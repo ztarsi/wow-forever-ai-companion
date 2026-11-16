@@ -1,3 +1,5 @@
+<p align="center"><img src="media/logo-400.png" width="160" alt="AI Companion logo: an open book under a guiding spark"></p>
+
 # AI Companion for World of Warcraft: Forever
 
 An add-on that saves a snapshot of your character (gear, bags, quests, professions, location, auction prices) to a file on your PC, so an AI assistant can act as your playing companion: what to do next, what to do with each item, what to buy. The advice then shows up in the game, in item tooltips.
@@ -151,6 +153,7 @@ Auction 7c (2653 listed, 34m ago)          vendor 1c
 | `companion/CODEX_GUIDE.md` | Optional Codex / ChatGPT setup and starting prompts. Points to `SKILL.md`. |
 | `companion/` | Tools the assistant uses: `gen_data.py` (writes the data add-on from a plan file), `build.py` and `template.html` (dashboard), `plans.example.json` (plan file format). |
 | `companion/auto/` | Optional automatic updates with Claude Code, for Windows and macOS: double-click installers, the shared checking logic (`core.py`) and one scheduler file per system. |
+| `media/` | The logo: `logo.svg` (source), PNGs at 400, 512 and 1024 pixels (400 for CurseForge), and `social-preview.png` (1280 × 640) for GitHub's link preview. Not installed. |
 | `FOREVER_INTERFACE` | The game version the add-on supports, set in this one place. `tools/set_interface.py` copies it into the other files. |
 | `tests/` | Automated checks: the add-on run inside a stand-in game client. Run on every change. |
 
