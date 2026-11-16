@@ -21,7 +21,7 @@ DECLARED_GLOBALS = {
     "AICompanionDB", "AICompanionRules", "AICompanionShopping", "AICompanionAdvice",
     "SLASH_AICOMPANION1", "SLASH_AICOMPANION2", "AICompanionCopyFrame", "AICompanionCopyScroll",
     "AICompanionAuctionButton", "AICompanionPlans", "AICompanionPanel", "AICompanionPanelScroll",
-    "AICompanionMinimapButton", "BINDING_HEADER_AICOMPANION", "BINDING_NAME_AICOMPANION_TOGGLE_PANEL",
+    "AICompanionMinimapButton", "AICompanionMeta", "BINDING_HEADER_AICOMPANION", "BINDING_NAME_AICOMPANION_TOGGLE_PANEL",
     "AICompanion_TogglePanel",
 }
 

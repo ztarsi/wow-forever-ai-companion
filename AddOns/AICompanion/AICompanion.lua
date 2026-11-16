@@ -5,7 +5,7 @@
 
 local ADDON_NAME, ns = ...
 ns = type(ns) == "table" and ns or {}
-local VERSION = "0.13.4"
+local VERSION = "0.14.4"
 local PREFIX = "|cff66ccffAI Companion|r: "
 
 local DB            -- AICompanionDB once loaded
@@ -1949,6 +1949,7 @@ local function handleSlash(msg)
         if snap then say(describe(snap) .. " Type /aic save to write it to disk for your companion.") end
     elseif cmd == "save" or cmd == "sync" then
         local snap = takeSnapshot("save")
+        DB.reminderAfterSave = time()                  -- remind about new advice after the reload
         if snap then say(describe(snap) .. " Reloading to write it to disk. If the screen does not reload, type /reload.") end
         -- Must run directly from the typed command: the game blocks reloads started from a timer.
         ReloadUI()
@@ -1984,6 +1985,16 @@ local function handleSlash(msg)
         end
     elseif cmd == "sort" then
         if rest:lower() == "debug" then sortDebugReport() else sortStart() end
+    elseif cmd == "reminder" then
+        local want = rest:lower()
+        if want == "on" or want == "off" then
+            DB.reloadReminder = want
+            say(want == "on" and "after /aic save I'll remind you to load new advice." or "no more reminders to load new advice.")
+        else
+            local auto = type(AICompanionMeta) == "table" and AICompanionMeta.automatic == true
+            say(("reminders to load new advice are %s. Change with /aic reminder on or /aic reminder off."):format(
+                DB.reloadReminder or (auto and "on (you use automatic updates)" or "off (you don't use automatic updates)")))
+        end
     elseif cmd == "panel" then
         if ns.panel and ns.panel.toggle then ns.panel.toggle() else say("the panel is not loaded; restart the game once after updating.") end
     elseif cmd == "probe" then
@@ -2002,13 +2013,58 @@ local function handleSlash(msg)
         print("  /aic ah age <n> with Auctionator: use its prices seen within n days (default 5)")
         print("  /aic sort       group your bags by advice: sell, auction, mail, bank, use, craft, quest, keep")
         print("  /aic panel      open or close your companion panel (also the minimap button)")
+        print("  /aic reminder on|off  remind me to load new advice after /aic save")
         print("  /aic sort debug what the bag sort found, and why it last stopped")
     end
 end
 
 -- What AICompanion_Panel.lua needs from this file.
+-------------------------------------------------------------------------------
+-- "New advice may be ready". The game reads AICompanion_Data only when the interface loads, and an
+-- automatic update writes it about a minute after /aic save. So, once per /aic save, the add-on
+-- reminds the player a little later (never in combat) and the panel offers a reload button.
+-- Timers only show the reminder; the reload itself always comes from the player's click.
+-------------------------------------------------------------------------------
+
+local REMINDER_DELAY = 120      -- seconds after the reload that /aic save causes
+local reminder = { due = nil, active = false }
+
+local function remindersOn()
+    local pref = DB and DB.reloadReminder
+    if pref == "off" then return false end
+    if pref == "on" then return true end
+    -- default: on when the data was last written by an automatic update
+    return type(AICompanionMeta) == "table" and AICompanionMeta.automatic == true
+end
+
+local function showReminder()
+    reminder.due = nil
+    if InCombatLockdown and InCombatLockdown() then reminder.waiting = true return end
+    reminder.waiting, reminder.active = false, true
+    say("your companion may have new advice. Click 'Load new advice' in the panel (/aic panel), or type /reload.")
+end
+
+-- At login after /aic save: schedule the one reminder for that save.
+local function scheduleReminder()
+    local savedAt = DB and DB.reminderAfterSave
+    if DB then DB.reminderAfterSave = nil end
+    if type(savedAt) ~= "number" or not remindersOn() then return end
+    local wait = math.min(REMINDER_DELAY - (time() - savedAt), REMINDER_DELAY)  -- never longer, even if the clock moved back
+    if wait < -600 then return end                 -- a stale save from long ago
+    reminder.due = true
+    C_Timer.After(math.max(wait, 1), function() if reminder.due then showReminder() end end)
+end
+
+-- Called directly from the panel button's click: the player's own action.
+local function loadNewAdvice()
+    reminder.active = false
+    ReloadUI()
+end
+
 ns.core = {
     db = function() return DB end,
+    reminderActive = function() return reminder.active end,
+    loadNewAdvice = loadNewAdvice,
     charKey = function() return charKey end,
     adviceFor = adviceFor, ruleFor = ruleFor, say = say, try = try, isSecret = isSecret,
     takeSnapshot = function(reason) return takeSnapshot(reason) end,
@@ -2061,6 +2117,7 @@ function handlers.PLAYER_LOGIN()
             if ok then DB.apiProbe = clean(res) else DB.apiProbeError = tostring(res) end
         end
         if not (InCombatLockdown and InCombatLockdown()) then takeSnapshot("login") end
+        pcall(scheduleReminder)
         if C_Timer.NewTicker then
             C_Timer.NewTicker(120, function() pcall(snapshotNow, "periodic") end)
         end
@@ -2080,6 +2137,7 @@ handlers.PLAYER_LEAVING_WORLD = function() snapshotNow("leaving world") end
 
 function handlers.PLAYER_REGEN_ENABLED()
     if dirty then requestSnapshot() end
+    if reminder.waiting then showReminder() end
 end
 
 handlers.BANKFRAME_OPENED = function() C_Timer.After(0.5, function() pcall(captureBank) end) end

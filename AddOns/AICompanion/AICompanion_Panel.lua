@@ -598,6 +598,10 @@ render = function()
     if frame.SetTitle then frame:SetTitle(title) elseif frame.titleText then frame.titleText:SetText(title) end
     frame.headline:SetText(m.headline or "")
     frame.footer:SetText(Panel.footer(m.takenAt, m.asOf, date("%Y-%m-%d")))
+    if frame.reloadButton then
+        local active = core().reminderActive
+        if active and active() then frame.reloadButton:Show() else frame.reloadButton:Hide() end
+    end
     for i, s in ipairs(Panel.SECTIONS) do
         if s.key == current then frame.selectedTabIndex = i end
     end
@@ -818,9 +822,21 @@ local function build()
         if show then local ok, err = pcall(show) if not ok then say("could not open the feedback window: " .. tostring(err)) end end
     end)
     f.feedbackButton = fb
+    -- after /aic save: reload to load advice an automatic update may have written. The reload
+    -- runs straight from this click (the player's own action), never from a timer.
+    local rb = CreateFrame("Button", nil, inner, "UIPanelButtonTemplate")
+    rb:SetSize(130, 20)
+    rb:SetPoint("RIGHT", fb, "LEFT", -6, 0)
+    rb:SetText("Load new advice")
+    rb:SetScript("OnClick", function()
+        local load = core().loadNewAdvice
+        if load then load() end
+    end)
+    rb:Hide()
+    f.reloadButton = rb
     f.footer = inner:CreateFontString(nil, "OVERLAY", FONT_TEXT)
     f.footer:SetPoint("BOTTOMLEFT", inner, "BOTTOMLEFT", MARGIN, bottom - 22)
-    f.footer:SetPoint("RIGHT", fb, "LEFT", -8, 0)
+    f.footer:SetPoint("RIGHT", rb, "LEFT", -8, 0)
     f.footer:SetJustifyH("LEFT")
     f.footer:SetWordWrap(false)
     f.footer:SetTextColor(0.7, 0.7, 0.7)
