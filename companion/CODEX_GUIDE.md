@@ -21,6 +21,14 @@ Check the tools actually available. Never claim to read a path or update the gam
 7. Use `companion/gen_data.py` to generate the player's data add-on, never the repository's empty test template. Read back written files and verify the intended output. Follow the generator's full-restart message; otherwise ask for `/reload`.
 8. Finish with what you learned, what you updated, and the next in-game action. Distinguish successful file generation from confirmation in the running game. Never publish a dashboard or file a GitHub issue without the player's request.
 
+## Optional automatic updates — Codex only
+
+For a player who wants unattended updates, follow [auto/README.md](auto/README.md#codex--chatgpt). Use the Codex-specific installer to select Codex; existing Claude installs keep Claude unless explicitly switched. Use the current Codex CLI with saved sign-in and check the player's actual CLI/model access. Ordinary ChatGPT chat and free desktop availability do not establish unattended CLI access.
+
+The watcher handles changes, run limits, validation, generation and notifications for every provider. Codex updates only the private `plans.json` in its sandboxed companion folder. During an unattended run, follow the watcher's instruction to stop after the plan update; the watcher publishes it. Do not wait on that run's own `.automation-running` marker. In an interactive session, wait while that marker exists and re-read `plans.json` before editing.
+
+Codex uses the CLI/account default model unless `codex_model` is set. Prefer an efficient available Luna model for routine updates, and keep the normal economical limits of 3 runs/day, 2 hours apart unless the player requests otherwise. The repository currently has temporary higher testing defaults. Codex has no per-run dollar-cap flag; report tokens without inventing dollar costs or promising a free-account allowance. A failed run stays pending; never fall back to another provider's account.
+
 ## Advice-only ChatGPT
 
 Ask the player to run `/aic save`, then `/aic copy` and paste the summary. An attached SavedVariables snapshot provides more detail if the session supports parsing Lua; otherwise use the summary and state its limits. Use only data actually shared, and ask for missing captures instead of inventing them.

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- AI Companion logo: an open book (your plan) under a guiding spark (the companion). Original artwork, MIT licensed with the project. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="64%">
+      <stop offset="0" stop-color="#22426b"/><stop offset="1" stop-color="#0a1424"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe9a8"/><stop offset=".5" stop-color="#e2b24a"/><stop offset="1" stop-color="#a0701c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#d4f1ff" stop-opacity="1"/><stop offset=".4" stop-color="#5fc3ff" stop-opacity=".5"/><stop offset="1" stop-color="#5fc3ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="256" cy="256" r="246" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#gold)" stroke-width="20"/>
+  <circle cx="256" cy="256" r="217" fill="none" stroke="#e2b24a" stroke-opacity=".3" stroke-width="3"/>
+  <circle cx="256" cy="196" r="128" fill="url(#glow)"/>
+  <path d="M94 316 C150 286 212 290 252 320 L252 404 C212 374 150 372 94 400 Z" fill="#f6e9c8" stroke="#a0701c" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M418 316 C362 286 300 290 260 320 L260 404 C300 374 362 372 418 400 Z" fill="#efdcb0" stroke="#a0701c" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M120 328 C160 311 206 313 238 333 M120 352 C160 335 206 337 238 357 M392 328 C352 311 306 313 274 333 M392 352 C352 335 306 337 274 357" fill="none" stroke="#c9a96a" stroke-width="6" stroke-linecap="round"/>
+  <path d="M88 400 C150 372 212 380 256 412 C300 380 362 372 424 400" fill="none" stroke="url(#gold)" stroke-width="12" stroke-linecap="round"/>
+  <path d="M256 84 C267 156 280 176 352 188 C280 200 267 220 256 292 C245 220 232 200 160 188 C232 176 245 156 256 84 Z" fill="#ffffff"/>
+  <path d="M256 124 C262 168 271 181 314 188 C271 195 262 208 256 252 C250 208 241 195 198 188 C241 181 250 168 256 124 Z" fill="#a6e3ff"/>
+  <circle cx="344" cy="118" r="10" fill="#ffffff"/><circle cx="172" cy="130" r="7" fill="#cfefff"/>
+</svg>
