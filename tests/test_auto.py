@@ -366,7 +366,8 @@ class MacRemovalWaits(unittest.TestCase):
     def setUp(self):
         import scheduler_macos as m
         self.m = m
-        self.saved = (m.subprocess.run, m.time.sleep, m.LABEL, m.plist_path)
+        self.saved = (m.subprocess.run, m.time.sleep, m.LABEL, m.plist_path, m._domain)
+        m._domain = lambda: "gui/501"                  # imitated, as on a Mac (Windows has no os.getuid)
         self.tmp = tempfile.mkdtemp()
         m.LABEL = "local.aicompanion.auto.test"
         m.plist_path = lambda: os.path.join(self.tmp, "agent.plist")
@@ -376,7 +377,7 @@ class MacRemovalWaits(unittest.TestCase):
 
     def tearDown(self):
         m = self.m
-        m.subprocess.run, m.time.sleep, m.LABEL, m.plist_path = self.saved
+        m.subprocess.run, m.time.sleep, m.LABEL, m.plist_path, m._domain = self.saved
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_uninstall_returns_only_once_the_agent_is_gone(self):
