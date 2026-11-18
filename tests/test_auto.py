@@ -331,6 +331,73 @@ class Schedulers(AutoTest):
         self.assertFalse(m.installed())
 
 
+class MacRemovalWaits(unittest.TestCase):
+    """launchctl bootout returns before the agent is gone; removal waits until launchctl confirms it.
+    Runs everywhere: launchctl is imitated, so the race can be reproduced on purpose."""
+
+    def fake_launchctl(self, m, gone_after):
+        """A launchctl whose agent is still listed for gone_after checks after each bootout."""
+        state = {"loaded": False, "left": 0, "calls": []}
+
+        class R:
+            def __init__(self, code): self.returncode, self.stdout, self.stderr = code, "", ""
+
+        def run(args, **kw):
+            state["calls"].append(args[1])
+            if args[1] == "bootout":
+                if state["loaded"]:
+                    state["left"] = gone_after
+                return R(0)
+            if args[1] == "bootstrap":
+                if state["loaded"]:
+                    return R(5)                       # macOS refuses: the old agent is not gone yet
+                state["loaded"] = True
+                return R(0)
+            if args[1] == "print":
+                if state["left"] > 0:
+                    state["left"] -= 1
+                    if state["left"] == 0:
+                        state["loaded"] = False
+                    return R(0)
+                return R(0 if state["loaded"] else 113)
+            return R(0)
+        return state, run
+
+    def setUp(self):
+        import scheduler_macos as m
+        self.m = m
+        self.saved = (m.subprocess.run, m.time.sleep, m.LABEL, m.plist_path)
+        self.tmp = tempfile.mkdtemp()
+        m.LABEL = "local.aicompanion.auto.test"
+        m.plist_path = lambda: os.path.join(self.tmp, "agent.plist")
+        m.time.sleep = lambda s: None
+        self.cfg = type("C", (), {"saved_variables": os.path.join(self.tmp, "SV", "AICompanion.lua"),
+                                  "log_dir": self.tmp, "__getitem__": lambda s, k: sys.executable})()
+
+    def tearDown(self):
+        m = self.m
+        m.subprocess.run, m.time.sleep, m.LABEL, m.plist_path = self.saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_uninstall_returns_only_once_the_agent_is_gone(self):
+        state, self.m.subprocess.run = self.fake_launchctl(self.m, gone_after=3)
+        state["loaded"] = True
+        self.m.uninstall()
+        self.assertFalse(self.m.installed())
+
+    def test_reinstall_waits_for_the_old_agent_before_starting_the_new_one(self):
+        state, self.m.subprocess.run = self.fake_launchctl(self.m, gone_after=3)
+        state["loaded"] = True                         # an older watcher is still installed
+        self.assertIn("Watching", self.m.install(self.cfg, "aic_auto.py"))
+        self.assertTrue(self.m.installed())
+
+    def test_gives_up_after_a_bounded_wait(self):
+        state, self.m.subprocess.run = self.fake_launchctl(self.m, gone_after=10 ** 6)
+        state["loaded"] = True
+        self.m.uninstall()                             # returns instead of hanging
+        self.assertLessEqual(state["calls"].count("print"), 60)
+
+
 class Defaults(unittest.TestCase):
     def test_defaults_are_valid_limits(self):
         self.assertGreaterEqual(core.DEFAULTS["max_runs_per_day"], 1)
