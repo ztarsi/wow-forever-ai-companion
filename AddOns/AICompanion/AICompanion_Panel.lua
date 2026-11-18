@@ -11,6 +11,7 @@ ns.panel = Panel
 local function core() return ns.core or {} end
 local function list(t) return type(t) == "table" and t or {} end
 local function say(msg) local s = core().say if s then s(msg) end end
+local function try(...) local t = core().try if t then return t(...) end end
 
 -------------------------------------------------------------------------------
 -- Content: pure functions over the plan and the saved snapshot
@@ -143,10 +144,62 @@ function Panel.place(w)
     return at
 end
 
+-- The Waypoint button (issue #45). The zone's map comes from the game's own map list; TomTom,
+-- when installed, gets one waypoint through its public AddWaypoint; otherwise, or if TomTom
+-- fails, the game's own map pin is set and tracked. Nothing here is protected or touches a game frame.
+local ZONE_MAP = 3                    -- Enum.UIMapType.Zone
+local mapCache = {}
+
+function Panel.mapIDFor(zone)
+    if type(zone) ~= "string" or zone == "" or not C_Map then return nil end
+    local key = zone:lower()
+    if mapCache[key] then return mapCache[key] end
+    local function named(info) return type(info) == "table" and type(info.name) == "string" and info.name:lower() == key end
+    local here = try(C_Map.GetBestMapForUnit, "player")
+    if here and named(try(C_Map.GetMapInfo, here)) then mapCache[key] = here return here end
+    local root = try(C_Map.GetFallbackWorldMapID) or 947
+    local found
+    local kids = try(C_Map.GetMapChildrenInfo, root, nil, true)
+    for _, m in ipairs(type(kids) == "table" and kids or {}) do
+        if named(m) and type(m.mapID) == "number" then
+            if m.mapType == ZONE_MAP then found = m.mapID break end
+            found = found or m.mapID
+        end
+    end
+    mapCache[key] = found
+    return found
+end
+
+function Panel.waypoint(w)
+    local text = Panel.place(w)
+    if not text then return false end
+    local id = Panel.mapIDFor(w.zone)
+    if not id then say(("could not find the map for %s, so no waypoint was set."):format(w.zone)) return false end
+    local x, y = tonumber(w.x) / 100, tonumber(w.y) / 100
+    local title = (type(w.label) == "string" and w.label ~= "") and w.label or w.zone
+    if type(TomTom) == "table" and type(TomTom.AddWaypoint) == "function" then
+        local ok, uid = pcall(TomTom.AddWaypoint, TomTom, id, x, y, { title = title, from = "AI Companion", persistent = false })
+        if ok and uid then say("TomTom arrow set: " .. text .. ".") return true end
+    end
+    if not (C_Map and type(C_Map.SetUserWaypoint) == "function") then say("this game has no map pins. " .. text .. ".") return false end
+    if try(C_Map.CanSetUserWaypointOnMap, id) == false then say(w.zone .. " does not take a map pin. " .. text .. ".") return false end
+    local point
+    if type(UiMapPoint) == "table" and type(UiMapPoint.CreateFromCoordinates) == "function" then
+        point = try(UiMapPoint.CreateFromCoordinates, id, x, y)
+    end
+    point = point or { uiMapID = id, position = (type(CreateVector2D) == "function" and CreateVector2D(x, y)) or { x = x, y = y } }
+    local ok, set = pcall(C_Map.SetUserWaypoint, point)
+    if not ok or set == false then say("the game did not set the map pin. " .. text .. ".") return false end
+    if C_SuperTrack then try(C_SuperTrack.SetSuperTrackedUserWaypoint, true) end
+    say("Map pin set: " .. text .. ". The arrow points to it; open the map to see it.")
+    return true
+end
+
 local function stepLine(step, f, ticks, sources)
     local line = { kind = "step", id = step.id, title = step.title or "", detail = step.detail,
                    caution = Panel.CAUTION[step.tag] }
     line.where = Panel.place(step.where)
+    if line.where then line.place = step.where end
     local src = step.source and type(sources) == "table" and sources[step.source] or nil
     if type(src) == "table" and src.label then
         line.source = "Source: " .. src.label
@@ -404,6 +457,7 @@ function Panel.rows(m, key, open)
                   sub = (open == rkey and #more > 0) and table.concat(more, "\n") or nil,
                   expandable = #more > 0,
                   check = l.kind == "step" and { id = l.id, done = l.done, auto = l.auto } or nil,
+                  place = (open == rkey) and l.place or nil,
                   done = l.done, isNext = l.isNext })
         end
     end
@@ -464,6 +518,10 @@ local function rowFrame(i)
     r.sub:SetJustifyH("LEFT")
     r.sub:SetWordWrap(true)
     r.sub:SetTextColor(DETAIL_GREY, DETAIL_GREY, DETAIL_GREY)
+    r.waypoint = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")   -- issue #45
+    r.waypoint:SetSize(90, 20)
+    r.waypoint:SetText("Waypoint")
+    r.waypoint:Hide()
     r.line = r:CreateTexture(nil, "ARTWORK")             -- the "Done" divider rule
     r.line:SetHeight(1)
     r.line:SetColorTexture(1, 1, 1, 0.15)
@@ -581,6 +639,20 @@ local function layout(rows, width, ticks)
             h = h + textHeight(f.sub, 14) + 8
         else
             f.sub:Hide()
+        end
+        -- an opened step with a place: the Waypoint button under its lines (issue #45)
+        if r.place and sub then
+            local place = r.place
+            f.waypoint:ClearAllPoints()
+            f.waypoint:SetPoint("TOPLEFT", f, "TOPLEFT", x + 8, -h)
+            f.waypoint:SetScript("OnClick", function()
+                local ok, err = pcall(Panel.waypoint, place)
+                if not ok then say("could not set the waypoint: " .. tostring(err)) end
+            end)
+            f.waypoint:Show()
+            h = h + 26
+        else
+            f.waypoint:Hide()
         end
         f:SetHeight(h)
         f:SetScript("OnClick", function()

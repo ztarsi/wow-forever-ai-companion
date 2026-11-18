@@ -708,6 +708,46 @@ C_SuperTrack = {
 C_Map = C_Map or {}
 C_Map.GetBestMapForUnit = C_Map.GetBestMapForUnit or function() return W.mapID end
 
+-- The world map, for finding a zone's map from its name (issue #45). W.maps lists
+-- { mapID, name, mapType, parentMapID }; the game's own map pin is recorded in M.userWaypoint.
+local function MAPS()
+    return W.maps or {
+        { mapID = 1429, name = "Elwynn Forest", mapType = 3, parentMapID = 1415 },
+        { mapID = 1453, name = "Stormwind City", mapType = 3, parentMapID = 1415 },
+        { mapID = 1415, name = "Eastern Kingdoms", mapType = 2, parentMapID = 947 },
+    }
+end
+C_Map.GetFallbackWorldMapID = function() return 947 end
+C_Map.GetMapChildrenInfo = function(id, mapType, all)
+    local out = {}
+    for _, m in ipairs(MAPS()) do
+        if (all or m.parentMapID == id) and (mapType == nil or m.mapType == mapType) then
+            out[#out + 1] = { mapID = m.mapID, name = m.name, mapType = m.mapType, parentMapID = m.parentMapID }
+        end
+    end
+    return out
+end
+C_Map.GetMapInfo = function(id)
+    for _, m in ipairs(MAPS()) do if m.mapID == id then return { mapID = m.mapID, name = m.name, mapType = m.mapType, parentMapID = m.parentMapID } end end
+end
+C_Map.CanSetUserWaypointOnMap = function(id) return not (W.noPinMaps or {})[id] end
+C_Map.SetUserWaypoint = function(point)
+    if not (type(point) == "table" and point.uiMapID and point.position) then error("SetUserWaypoint: bad UiMapPoint") end
+    M.userWaypoint = { mapID = point.uiMapID, x = point.position.x, y = point.position.y }
+    return true
+end
+C_SuperTrack.SetSuperTrackedUserWaypoint = function(on) M.userWaypointTracked = on == true end
+function CreateVector2D(x, y) return { x = x, y = y } end
+-- A stand-in TomTom (W.tomtom = "ok" or "fails"), used only through its AddWaypoint function.
+if W.tomtom then
+    TomTom = { waypoints = {} }
+    function TomTom:AddWaypoint(mapID, x, y, opts)
+        if W.tomtom == "fails" then error("TomTom broke") end
+        self.waypoints[#self.waypoints + 1] = { mapID = mapID, x = x, y = y, title = opts and opts.title, from = opts and opts.from }
+        return { mapID, x, y }
+    end
+end
+
 -------------------------------------------------------------------------------
 -- Trainer window (only while open). W.trainerWindow = { type = TrainerType, services = {...} }.
 -- The hunter's Beast Training uses the same window with type 3 (Pet) and no NPC (issue #46).
