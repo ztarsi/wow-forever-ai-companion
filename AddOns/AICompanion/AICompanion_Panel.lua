@@ -133,9 +133,20 @@ function Panel.check(rule, f)
 end
 
 -- One step as a panel line: its tick state and where it comes from.
+-- A step's place (issue #44): "Innkeeper Farley \226\128\148 Elwynn Forest 42.1, 65.9", or nil.
+function Panel.place(w)
+    if type(w) ~= "table" or type(w.zone) ~= "string" or w.zone == "" then return nil end
+    local x, y = tonumber(w.x), tonumber(w.y)
+    if not (x and y) then return nil end
+    local at = ("%s %.1f, %.1f"):format(w.zone, x, y)
+    if type(w.label) == "string" and w.label ~= "" then return w.label .. " \226\128\148 " .. at end
+    return at
+end
+
 local function stepLine(step, f, ticks, sources)
     local line = { kind = "step", id = step.id, title = step.title or "", detail = step.detail,
                    caution = Panel.CAUTION[step.tag] }
+    line.where = Panel.place(step.where)
     local src = step.source and type(sources) == "table" and sources[step.source] or nil
     if type(src) == "table" and src.label then
         line.source = "Source: " .. src.label
@@ -386,6 +397,7 @@ function Panel.rows(m, key, open)
         else
             local more = {}
             if l.detail and l.detail ~= "" then more[#more + 1] = l.detail end
+            if l.where then more[#more + 1] = l.where end
             if l.caution then more[#more + 1] = l.caution end
             if l.source then more[#more + 1] = l.source end
             add({ key = rkey, text = (l.number and (l.number .. ". ") or "") .. l.title, style = "step",

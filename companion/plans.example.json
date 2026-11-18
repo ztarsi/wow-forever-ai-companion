@@ -10,7 +10,7 @@
    "headlineShort": "At most 100 characters, to you: the one thing for you to do next.",
    "next": [
     { "id": "f-bags", "title": "Free up bag space before leaving town", "detail": "Sell the items marked Sell to vendor before you head out.", "tag": "game", "done": { "freeSlots": 10 } },
-    { "id": "f-split", "title": "Quest name (2 levels above you): kill the level 10-11 wolves now", "detail": "Do the wolf objective here, a short walk east of you at Zone Name 44.0, 61.5. Leave the level 13 pack leader for later, after you level.", "tag": "lookup", "source": "example" },
+    { "id": "f-split", "title": "Quest name (2 levels above you): kill the level 10-11 wolves now", "detail": "Do the wolf objective here, a short walk east of you at Zone Name 44.0, 61.5. Leave the level 13 pack leader for later, after you level.", "tag": "lookup", "source": "example", "where": { "zone": "Zone Name", "x": 44.0, "y": 61.5, "label": "Wolves, east of you" } },
     { "id": "f-eat", "title": "Eat before the fight", "detail": "A step the snapshot cannot detect gets no done rule, so the page shows a tick box.", "tag": "judgment" }
    ],
    "questing": [
