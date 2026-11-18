@@ -906,11 +906,21 @@ local function build()
         if show then local ok, err = pcall(show) if not ok then say("could not open the feedback window: " .. tostring(err)) end end
     end)
     f.feedbackButton = fb
+    -- this character's main and second direction (issue #51)
+    local gb = CreateFrame("Button", nil, inner, "UIPanelButtonTemplate")
+    gb:SetSize(80, 20)
+    gb:SetPoint("RIGHT", fb, "LEFT", -6, 0)
+    gb:SetText("Goals")
+    gb:SetScript("OnClick", function()
+        local show = core().showGoals
+        if show then local ok, err = pcall(show) if not ok then say("could not open the goals window: " .. tostring(err)) end end
+    end)
+    f.goalsButton = gb
     -- after /aic save: reload to load advice an automatic update may have written. The reload
     -- runs straight from this click (the player's own action), never from a timer.
     local rb = CreateFrame("Button", nil, inner, "UIPanelButtonTemplate")
     rb:SetSize(130, 20)
-    rb:SetPoint("RIGHT", fb, "LEFT", -6, 0)
+    rb:SetPoint("RIGHT", gb, "LEFT", -6, 0)
     rb:SetText("Load new advice")
     rb:SetScript("OnClick", function()
         local load = core().loadNewAdvice

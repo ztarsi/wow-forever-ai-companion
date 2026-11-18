@@ -25,7 +25,7 @@ DEFAULTS = {
     "debounce_seconds": 30,
     "durability_warn_percent": 25,
     "bags_nearly_full_free_slots": 4,
-    "web_research_on": ["level_bracket", "new_zone"],
+    "web_research_on": ["level_bracket", "new_zone", "goals"],
     "level_bracket_size": 5,
     "game_dir": None,        # found automatically when empty
     "account": None,         # the account whose AICompanion.lua was written last, when empty
@@ -244,7 +244,10 @@ def summarize(key, store, db, cfg):
             profs[p["name"]] = {"rank": p.get("rank"), "max": p.get("max")}
     recipes = {k: (v or {}).get("seenAtText") for k, v in (store.get("recipes") or {}).items() if isinstance(v, dict)}
     questions = [q.get("text") for q in lst(db.get("questions")) if isinstance(q, dict) and q.get("character") == key]
+    g = store.get("goals") if isinstance(store.get("goals"), dict) else {}
+    name = lambda v: v.get("name") if isinstance(v, dict) else None
     return {
+        "goals": {"main": name(g.get("main")), "second": name(g.get("second"))},
         "name": c.get("name") or key.split("@")[0], "level": c.get("level"), "zone": loc.get("zone"),
         "talentPoints": c.get("unspentTalentPoints") or 0, "quests": quests,
         "bagsFree": sum(b.get("free") or 0 for b in bags), "durabilityLow": sorted(x for x in low if x),
@@ -307,7 +310,25 @@ def changes(old, new, seen_zones, cfg):
             out.append((kind, "%s visited %s (%s)" % (n, who, kind[:-1])))
     for q in new["questions"][len(old["questions"]):]:
         out.append(("question", "%s asked: %s" % (n, q)))
+    # Goals (issue #51). A state saved before goals existed has no "goals": that first look is a baseline.
+    if "goals" in old and new.get("goals") != old["goals"]:
+        out.append(("goals", goal_change(n, old["goals"], new.get("goals") or {})))
     return out
+
+
+def goal_change(n, old, new):
+    """The goal change in plain words, as the prompt and the notification use it."""
+    om, osec, nm, nsec = old.get("main"), old.get("second"), new.get("main"), new.get("second")
+    second = " (second: %s)" % nsec if nsec else ""
+    if not nm:
+        return "%s cleared their goals" % n
+    if not om:
+        return "%s set goals: main %s%s" % (n, nm, ", second %s" % nsec if nsec else "")
+    if nm != om:
+        return "%s switched from %s to %s%s" % (n, om, nm, second)
+    if nsec:
+        return "%s changed their second direction to %s (main: %s)" % (n, nsec, nm)
+    return "%s dropped their second direction %s (main: %s)" % (n, osec, nm)
 
 
 # ------------------------------------------------------------------ budget
@@ -549,6 +570,9 @@ def decide(cfg, mode, notify=None, out=print):
             return
         try:
             message = publish_plan(cfg, store, before)
+            goals = [c for c in pending if c.get("kind") == "goals"]
+            if goals:                                   # name the goal change first (issue #51)
+                message = "%s: talent and gear advice updated. %s" % (goals[-1]["text"], message)
         except (OSError, ValueError, subprocess.SubprocessError) as e:
             rec["ok"] = False
             rec["publication_error"] = str(e)

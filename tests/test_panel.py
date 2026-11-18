@@ -1013,3 +1013,16 @@ class WaypointButton(PanelTest):
         self.assertIsNone(g.M.userWaypoint)
         self.assertTrue(any("does not take a map pin" in l for l in g.chat()))
 
+
+class GoalsButton(PanelTest):
+    """Issue #51: the panel opens the Goals window."""
+
+    def test_goals_button_opens_the_window(self):
+        g = self.game(data_source=data_file())
+        f = self.open(g)
+        b = f.goalsButton
+        self.assertEqual(b.text, "Goals")
+        b.scripts.OnClick(b)
+        self.assertTrue(g.lua.globals().AICompanionGoalsFrame.shown)
+        self.assertEqual(g.lua.eval("AICompanionGoalsFrame.strata"), "FULLSCREEN_DIALOG")   # above the panel
+
