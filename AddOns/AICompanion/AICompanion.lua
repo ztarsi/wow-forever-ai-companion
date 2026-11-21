@@ -5,7 +5,7 @@
 
 local ADDON_NAME, ns = ...
 ns = type(ns) == "table" and ns or {}
-local VERSION = "0.15.0"
+local VERSION = "0.16.0"
 local PREFIX = "|cff66ccffAI Companion|r: "
 
 local DB            -- AICompanionDB once loaded
@@ -1925,72 +1925,116 @@ local function showFeedback(kind)
 end
 
 -------------------------------------------------------------------------------
--- Goals (issue #51): the direction the player wants for this character, a main and an optional
--- second, chosen from the class's specializations as the game names them. Saved with the
--- character in characters[...].goals; the companion plans around it and automatic updates treat
--- a change as a reason to run. The window is the add-on's own frame on UIParent.
+-- Goals (issue #51): what the player wants from this character, in the terms WoW Forever players
+-- use. Talent focus: a main talent tree and a second one (dual specialization opens at level 40),
+-- named as the game's talent system names its trees. Role in groups: only roles the game says the
+-- class can fill. Working towards: up to three of the game's goals (level, first mount, dungeons,
+-- raids, PvP rank, professions, gold, reputation, Legacy points, collecting). And one goal in the
+-- player's own words. Saved with the character in characters[...].goals; the companion plans
+-- around it and automatic updates treat a change as a reason to run. The window is the add-on's
+-- own frame on UIParent.
 -------------------------------------------------------------------------------
 
+local FOCUS = { "Level up", "First mount", "Dungeons", "Raids", "PvP rank", "Professions", "Gold",
+                "Reputation", "Legacy points", "Collecting" }
+local FOCUS_MAX = 3
+local TARGET_MAX = 60
 local goalsFrame
-local goalPick = {}
+local pick = { focus = {} }
 
-local function goalOptions()
-    local opts = {}
-    local _, _, classID = try(UnitClass, "player")
-    local S = C_SpecializationInfo
-    if S and type(classID) == "number" and not isSecret(classID) then
-        local n = try(S.GetNumSpecializationsForClassID, classID)
-        for i = 1, (type(n) == "number" and not isSecret(n)) and n or 0 do
-            local id, name, _, _, role = try(S.GetSpecializationInfo, i, false, false, nil, nil, nil, classID)
-            name = plainText(name)
-            if name then opts[#opts + 1] = { name = name, specID = id, role = plainText(role) } end
+-- The class's talent trees: Forever's talent system lists them as the display groups of the class
+-- tree, each with a displayName and an orderIndex (C_Traits.GetGroupDisplayInfoByTreeID).
+local function talentTrees()
+    local names, seen = {}, {}
+    if not (C_Traits and C_ClassTalents) then return names end
+    local configID = try(C_ClassTalents.GetActiveConfigID)
+    local cfg = configID and try(C_Traits.GetConfigInfo, configID)
+    if type(cfg) ~= "table" then return names end
+    for _, treeID in ipairs(type(cfg.treeIDs) == "table" and cfg.treeIDs or {}) do
+        local groups = try(C_Traits.GetGroupDisplayInfoByTreeID, treeID)
+        local sorted = {}
+        for _, gr in ipairs(type(groups) == "table" and groups or {}) do
+            if type(gr) == "table" and plainText(gr.displayName) then sorted[#sorted + 1] = gr end
+        end
+        table.sort(sorted, function(a, b) return (tonumber(a.orderIndex) or 0) < (tonumber(b.orderIndex) or 0) end)
+        for _, gr in ipairs(sorted) do
+            if not seen[gr.displayName] then seen[gr.displayName] = true names[#names + 1] = gr.displayName end
         end
     end
-    return opts
+    -- three or so named trees is what a class has; anything else is not the talent trees
+    if #names < 2 or #names > 4 then return {} end
+    return names
 end
 
-local function goalsNow(g)
-    if type(g) ~= "table" or type(g.main) ~= "table" then return "No goals set yet." end
-    return "Now: main " .. tostring(g.main.name) .. (type(g.second) == "table" and (", second " .. tostring(g.second.name)) or "") .. "."
+local function roleOptions()
+    local tank, heal, dps = try(UnitGetAvailableRoles, "player")
+    local out = {}
+    if tank == true then out[#out + 1] = "Tank" end
+    if heal == true then out[#out + 1] = "Healer" end
+    if dps == true then out[#out + 1] = "Damage" end
+    return out
 end
 
-local function previousOf(g)
-    if type(g) ~= "table" or type(g.main) ~= "table" then return nil end
-    return { main = g.main.name, second = type(g.second) == "table" and g.second.name or nil }
+-- A saved goals table in a few words; "" when it holds no goal (a 0.15.0 class-name goal holds none).
+local function goalsText(g)
+    if type(g) ~= "table" then return "" end
+    local parts = {}
+    local t = type(g.talents) == "table" and g.talents or nil
+    if t and t.main then parts[#parts + 1] = "talents " .. t.main .. (t.second and (", second " .. t.second) or "") end
+    if g.role then parts[#parts + 1] = "role " .. g.role end
+    if type(g.focus) == "table" and #g.focus > 0 then parts[#parts + 1] = "working towards " .. table.concat(g.focus, ", ") end
+    if g.target then parts[#parts + 1] = "your goal: " .. g.target end
+    return table.concat(parts, "; ")
 end
 
--- Saves main (and second) option records, or clears when main is nil. Returns true when it changed.
-local function saveGoals(main, second)
+local function hasGoals(g) return goalsText(g) ~= "" end
+
+-- Saves the picked goals (nil clears). Returns true when it changed anything.
+local function saveGoals(new)
     local store = charStore()
     local old = store.goals
-    local oldMain = type(old) == "table" and type(old.main) == "table" and old.main.name or nil
-    local oldSecond = type(old) == "table" and type(old.second) == "table" and old.second.name or nil
-    if (main and main.name) == oldMain and (second and second.name) == oldSecond then return false end
-    store.goals = { main = main, second = second, setAt = time(), setAtText = date("%Y-%m-%d %H:%M:%S"),
-                    previous = previousOf(old) }
-    note("goals " .. tostring(main and main.name) .. "/" .. tostring(second and second.name))
+    if goalsText(new) == goalsText(old) then return false end
+    local g = new or {}
+    g.setAt, g.setAtText = time(), date("%Y-%m-%d %H:%M:%S")
+    if hasGoals(old) then g.previous = goalsText(old) end
+    store.goals = g
+    note("goals " .. goalsText(new))
     if not (InCombatLockdown and InCombatLockdown()) then takeSnapshot("goals") end
     return true
+end
+
+local function pickedGoals()
+    local f = goalsFrame
+    local g = {}
+    if pick.main then g.talents = { main = pick.main, second = pick.second } end
+    g.role = pick.role
+    local focus = {}
+    for _, label in ipairs(FOCUS) do if pick.focus[label] then focus[#focus + 1] = label end end
+    if #focus > 0 then g.focus = focus end
+    local text = tostring(f.targetBox:GetText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if text ~= "" then g.target = text:sub(1, TARGET_MAX) end
+    return g
 end
 
 local function refreshGoals()
     local f = goalsFrame
     if not f then return end
-    for _, b in ipairs(f.mainButtons) do
-        if b.goal and b.goal.name == goalPick.main then b:LockHighlight() else b:UnlockHighlight() end
+    local function mark(list, isOn)
+        for _, b in ipairs(list) do if b.value ~= nil or b.none then
+            if isOn(b) then b:LockHighlight() else b:UnlockHighlight() end
+        end end
     end
-    for _, b in ipairs(f.secondButtons) do
-        if b.goal and b.goal.name == goalPick.second then b:LockHighlight() else b:UnlockHighlight() end
-    end
-    if goalPick.second == nil then f.noneButton:LockHighlight() else f.noneButton:UnlockHighlight() end
+    mark(f.mainButtons, function(b) return b.value == pick.main end)
+    mark(f.secondButtons, function(b) return (b.none and pick.second == nil) or (b.value ~= nil and b.value == pick.second) end)
+    mark(f.roleButtons, function(b) return (b.none and pick.role == nil) or (b.value ~= nil and b.value == pick.role) end)
+    mark(f.focusButtons, function(b) return b.value ~= nil and pick.focus[b.value] == true end)
 end
 
 local function showGoals()
     if not DB or not charKey then return end
-    local opts = goalOptions()
     if not goalsFrame then
         local f = CreateFrame("Frame", "AICompanionGoalsFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-        f:SetSize(520, 230)
+        f:SetSize(600, 400)
         f:SetPoint("CENTER")
         f:SetFrameStrata("FULLSCREEN_DIALOG")   -- above the panel, which it opens from
         if f.SetBackdrop then
@@ -2010,17 +2054,27 @@ local function showGoals()
         f.title:SetPoint("TOPLEFT", 12, -10)
         local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
         close:SetPoint("TOPRIGHT", 0, 0)
-        local mainLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        mainLabel:SetPoint("TOPLEFT", 14, -40)
-        mainLabel:SetText("Main direction:")
-        local secondLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        secondLabel:SetPoint("TOPLEFT", 14, -100)
-        secondLabel:SetText("Second direction (optional):")
-        f.mainButtons, f.secondButtons = {}, {}
-        f.noneButton = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-        f.noneButton:SetSize(110, 22)
-        f.noneButton:SetText("None")
-        f.noneButton:SetScript("OnClick", function() goalPick.second = nil refreshGoals() end)
+        local function label(text, y)
+            local l = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            l:SetPoint("TOPLEFT", 14, y)
+            l:SetText(text)
+            return l
+        end
+        label("Main talent tree:", -36)
+        label("Second talent tree (dual spec from level 40):", -84)
+        label("Role in groups:", -132)
+        label("Working towards (up to three):", -180)
+        label("Your own goal (one line):", -280)
+        f.treeNote = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        f.treeNote:SetPoint("TOPLEFT", 14, -56)
+        f.mainButtons, f.secondButtons, f.roleButtons, f.focusButtons = {}, {}, {}, {}
+        local box = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+        box:SetSize(560, 22)
+        box:SetPoint("TOPLEFT", 18, -298)
+        box:SetAutoFocus(false)
+        box:SetMaxLetters(TARGET_MAX)
+        box:SetScript("OnEscapePressed", function() f:Hide() end)
+        f.targetBox = box
         f.status = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         f.status:SetPoint("BOTTOMLEFT", 14, 44)
         f.status:SetPoint("RIGHT", f, "RIGHT", -14, 0)
@@ -2040,68 +2094,69 @@ local function showGoals()
         f.clearButton:SetPoint("BOTTOMLEFT", 12, 12)
         f.cancelButton:SetScript("OnClick", function() f:Hide() end)
         f.clearButton:SetScript("OnClick", function()
-            if saveGoals(nil, nil) then say("goals cleared. Type /aic save to tell your companion.") end
+            if saveGoals(nil) then say("goals cleared. Type /aic save to tell your companion.") end
+            f:Hide()
+        end)
+        f.saveButton:SetScript("OnClick", function()
+            local g = pickedGoals()
+            if not hasGoals(g) then say("choose at least one goal, then Save.") return end
+            if saveGoals(g) then say("goals saved: " .. goalsText(g) .. ". Type /aic save to send them to your companion.") end
             f:Hide()
         end)
         if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "AICompanionGoalsFrame") end
         goalsFrame = f
     end
     local f = goalsFrame
-    f.title:SetText("AI Companion: goals for " .. tostring((charKey or ""):match("^[^@]+") or ""))
-    f.options = opts
-    local function place(list, i, y, goal, onClick)
-        local b = list[i]
-        if not b then
-            b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-            b:SetSize(110, 22)
-            list[i] = b
+    -- one row of buttons: values in order, plus "None" when the choice is optional
+    local function row(list, values, y, width, perRow, withNone, onClick)
+        local items = {}
+        for _, v in ipairs(values) do items[#items + 1] = { value = v } end
+        if withNone then items[#items + 1] = { none = true } end
+        for i, it in ipairs(items) do
+            local b = list[i]
+            if not b then
+                b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+                list[i] = b
+            end
+            b:SetSize(width, 22)
+            b:ClearAllPoints()
+            local col, line = (i - 1) % perRow, math.floor((i - 1) / perRow)
+            b:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + col * (width + 6), y - line * 26)
+            b.value, b.none = it.value, it.none
+            b:SetText(it.none and "None" or it.value)
+            b:SetScript("OnClick", function() onClick(it.value) refreshGoals() end)
+            b:Show()
         end
-        b:ClearAllPoints()
-        b:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + (i - 1) * 116, y)
-        b:SetText(goal.name)
-        b.goal = goal
-        b:SetScript("OnClick", onClick)
-        b:Show()
+        for i = #items + 1, #list do list[i]:Hide() list[i].value, list[i].none = nil, nil end
     end
-    for i, o in ipairs(opts) do
-        place(f.mainButtons, i, -58, o, function()
-            goalPick.main = o.name
-            if goalPick.second == o.name then goalPick.second = nil end
-            refreshGoals()
-        end)
-        place(f.secondButtons, i, -118, o, function()
-            if goalPick.main ~= o.name then goalPick.second = o.name end
-            refreshGoals()
-        end)
-    end
-    for i = #opts + 1, #f.mainButtons do f.mainButtons[i]:Hide() f.secondButtons[i]:Hide() end
-    f.noneButton:ClearAllPoints()
-    f.noneButton:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + #opts * 116, -118)
-    local cur = charStore().goals
-    goalPick.main = type(cur) == "table" and type(cur.main) == "table" and cur.main.name or nil
-    goalPick.second = type(cur) == "table" and type(cur.second) == "table" and cur.second.name or nil
-    f.saveButton:SetScript("OnClick", function()
-        local main, second
-        for _, o in ipairs(opts) do
-            if o.name == goalPick.main then main = o end
-            if o.name == goalPick.second then second = o end
-        end
-        if not main then say("choose a main direction first, then Save.") return end
-        if saveGoals(main, second) then
-            say(("goals saved: main %s%s. Type /aic save to send them to your companion."):format(
-                main.name, second and (", second " .. second.name) or ""))
-        end
-        f:Hide()
+    local trees, roles = talentTrees(), roleOptions()
+    row(f.mainButtons, trees, -52, 110, 5, false, function(v)
+        pick.main = v
+        if pick.second == v then pick.second = nil end
     end)
-    if #opts == 0 then
-        f.saveButton:Hide()
-        f.noneButton:Hide()
-        f.status:SetText("The game lists no directions for your class. Tell your companion in chat instead, or with /aic ask.")
-    else
-        f.saveButton:Show()
-        f.noneButton:Show()
-        f.status:SetText(goalsNow(cur))
+    row(f.secondButtons, #trees > 0 and trees or {}, -100, 110, 5, #trees > 0, function(v)
+        if v == nil or v ~= pick.main then pick.second = v end
+    end)
+    f.treeNote:SetText(#trees == 0 and "The game lists no talent trees yet (they open at level 10). Set the rest now." or "")
+    row(f.roleButtons, roles, -148, 110, 5, true, function(v) pick.role = v end)
+    row(f.focusButtons, FOCUS, -196, 110, 5, false, function(v)
+        if pick.focus[v] then pick.focus[v] = nil return end
+        local n = 0
+        for _ in pairs(pick.focus) do n = n + 1 end
+        if n >= FOCUS_MAX then say("pick up to three things to work towards; click one again to take it off.") return end
+        pick.focus[v] = true
+    end)
+    f.title:SetText("AI Companion: goals for " .. tostring((charKey or ""):match("^[^@]+") or ""))
+    local cur = charStore().goals
+    if not hasGoals(cur) then cur = nil end
+    pick = { focus = {} }
+    if cur then
+        local t = type(cur.talents) == "table" and cur.talents or {}
+        pick.main, pick.second, pick.role = t.main, t.second, cur.role
+        for _, v in ipairs(type(cur.focus) == "table" and cur.focus or {}) do pick.focus[v] = true end
     end
+    f.targetBox:SetText(cur and cur.target or "")
+    f.status:SetText(cur and ("Now: " .. goalsText(cur) .. ".") or "No goals set yet.")
     refreshGoals()
     f:Show()
 end

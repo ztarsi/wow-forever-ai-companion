@@ -116,7 +116,7 @@ Keep your private `plans.json` in one persistent folder outside this repository,
 | `/aic ah` | At an auctioneer: check prices for your bags, bank and shopping list. If you use Auctionator, its prices are used instead and this checks only what Auctionator hasn't seen lately. |
 | `/aic ah age <days>` | With Auctionator: how many days its prices count as fresh (default 5). Older than that, the "check prices" button comes back. |
 | `/aic sort` | Group your bags by what to do with each item: sell, auction, mail, bank, use, craft, quest, keep. |
-| `/aic goals` | Choose this character's main and second direction (for example Balance, with Restoration second). Your companion plans talents, gear and quest rewards around it. Also the Goals button on the panel. |
+| `/aic goals` | Set this character's goals: your main talent tree (and a second one for dual spec at 40), your role in groups, up to three things you're working towards (first mount, dungeons, raids, PvP, gold...), and one goal in your own words. Your companion plans around them. Also the Goals button on the panel. |
 | `/aic feedback` | Report a problem or share an idea, in a small window. Also the Feedback button on the panel. Your companion files it on GitHub after your next `/aic save`. `/aic bug <text>` and `/aic idea <text>` do it in one line. |
 | `/aic panel` | Open your companion panel: this character's plan, inside the game. Also the book button on the minimap (drag it to move it). |
 | `/aic reminder on` / `off` | After `/aic save`, remind me when new advice may be ready, with a "Load new advice" button in the panel. On automatically if you use automatic updates. |

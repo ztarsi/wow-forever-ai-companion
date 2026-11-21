@@ -1026,3 +1026,18 @@ class GoalsButton(PanelTest):
         self.assertTrue(g.lua.globals().AICompanionGoalsFrame.shown)
         self.assertEqual(g.lua.eval("AICompanionGoalsFrame.strata"), "FULLSCREEN_DIALOG")   # above the panel
 
+
+class LevelAndGoldRules(PanelTest):
+    """Goal steps tick themselves: reach a level, hold an amount of money (copper)."""
+
+    def test_level_and_money_rules(self):
+        g = self.game(data_source=data_file())
+        c = g.db()["characters"]["Testchar@Testrealm"]["snapshot"]["character"]
+        P = self.panel(g)
+        f = P.facts(g.lua.eval('AICompanionDB.characters["Testchar@Testrealm"]'))
+        rule = lambda k, v: g.lua.table_from({k: v})
+        self.assertTrue(P.check(rule("level", c["level"]), f))
+        self.assertFalse(P.check(rule("level", c["level"] + 1), f))
+        self.assertTrue(P.check(rule("money", c["money"]), f))
+        self.assertFalse(P.check(rule("money", c["money"] + 1), f))
+
