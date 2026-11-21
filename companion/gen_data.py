@@ -75,9 +75,26 @@ for cname, c in d.get("characters", {}).items():
         n += 1
     out.append("        },")
 out += ["    },", "}", ""]
+def check_places(cname, v):
+    """A step's optional place: {"zone", "x", "y", "label"}, coordinates on the game's 0-100 map scale."""
+    if isinstance(v, list):
+        for x in v: check_places(cname, x)
+    elif isinstance(v, dict):
+        if "where" in v:
+            w, step = v["where"], v.get("id") or v.get("title") or "?"
+            ok = (isinstance(w, dict) and isinstance(w.get("zone"), str) and w["zone"].strip() != ""
+                  and all(isinstance(w.get(k), (int, float)) and not isinstance(w.get(k), bool)
+                          and 0 <= w[k] <= 100 for k in ("x", "y"))
+                  and (w.get("label") is None or (isinstance(w["label"], str) and len(w["label"]) <= 48)))
+            if not ok:
+                sys.exit("bad \"where\" on step %s of %s: use {\"zone\": \"Zone\", \"x\": 42.1, \"y\": 65.9, "
+                         "\"label\": \"who or what is there, at most 48 characters\"}, x and y from 0 to 100" % (step, cname))
+        for k, x in v.items():
+            if k != "where": check_places(cname, x)
 plans = {}
 for cname, c in d.get("characters", {}).items():
     p = {k: c[k] for k in PLAN_KEYS if c.get(k) not in (None, "", [], {})}
+    check_places(cname, p)
     assert len(p.get("headlineShort", "")) <= 100, "headlineShort over 100 characters for %s" % cname
     if p: plans[cname] = p
 # Feedback the player left with /aic feedback that the companion has filed: entry id -> issue ("#34").

@@ -854,3 +854,79 @@ class LongLines(PanelTest):
         r.scripts.OnClick(r)
         self.assertFalse(self.row(g, "11. Hearth home").sub.shown)
 
+
+class StepPlaces(PanelTest):
+    """Issue #44: a step's place (`where`) shows on its own line when the step is opened."""
+
+    def plan(self, where):
+        import copy
+        plan = copy.deepcopy(PLAN)
+        steps = plan["characters"]["Testchar"]["next"]
+        steps.append({"id": "t-inn", "title": "Set your hearth", "tag": "lookup", "where": where})
+        return plan
+
+    def test_place_line_when_opened(self):
+        g = self.game(data_source=data_file(self.plan(
+            {"zone": "Testvale", "x": 42.1, "y": 65.9, "label": "Innkeeper Testa"})))
+        f = self.open(g)
+        rows = {r["key"]: r for r in to_py(f.lastRows)}
+        self.assertTrue(rows["t-inn"]["expandable"])          # a place alone makes a step openable
+        self.assertNotIn("sub", rows["t-inn"])
+        self.panel(g).expand("t-inn")
+        rows = {r["key"]: r for r in to_py(f.lastRows)}
+        self.assertEqual(rows["t-inn"]["sub"], "Innkeeper Testa \u2014 Testvale 42.1, 65.9")
+
+    def test_place_without_a_label(self):
+        g = self.game(data_source=data_file(self.plan({"zone": "Testvale", "x": 5, "y": 60.26})))
+        self.open(g)
+        self.panel(g).expand("t-inn")
+        rows = {r["key"]: r for r in to_py(g.lua.globals().AICompanionPanel.lastRows)}
+        self.assertEqual(rows["t-inn"]["sub"], "Testvale 5.0, 60.3")
+
+    def test_place_line_after_the_detail(self):
+        plan = self.plan({"zone": "Testvale", "x": 42.1, "y": 65.9, "label": "Innkeeper Testa"})
+        plan["characters"]["Testchar"]["next"][-1]["detail"] = "Talk to the innkeeper."
+        g = self.game(data_source=data_file(plan))
+        self.open(g)
+        self.panel(g).expand("t-inn")
+        rows = {r["key"]: r for r in to_py(g.lua.globals().AICompanionPanel.lastRows)}
+        self.assertEqual(rows["t-inn"]["sub"], "Talk to the innkeeper.\nInnkeeper Testa \u2014 Testvale 42.1, 65.9")
+
+    def test_steps_without_a_place_are_unchanged(self):
+        g = self.game(data_source=data_file())
+        f = self.open(g)
+        self.panel(g).expand("t-bow")
+        self.assertEqual(to_py(f.lastRows)[1]["sub"], "5.7 DPS.")
+
+    def gen(self, where):
+        d = tempfile.mkdtemp()
+        src, out = os.path.join(d, "plans.json"), os.path.join(d, "AICompanion_Data.lua")
+        with open(src, "w", encoding="utf-8") as f:
+            json.dump(self.plan(where), f)
+        return subprocess.run([sys.executable, os.path.join(ROOT, "companion/gen_data.py"), src, out],
+                              capture_output=True, text=True), out
+
+    def test_generator_writes_the_place(self):
+        p, out = self.gen({"zone": "Testvale", "x": 42.1, "y": 65.9, "label": "Innkeeper Testa"})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        with open(out, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn('["zone"] = "Testvale"', text)
+        self.assertIn('["x"] = 42.1', text)
+
+    def test_generator_refuses_a_bad_place(self):
+        bad = [
+            {"x": 42.1, "y": 65.9},                                        # no zone
+            {"zone": "", "x": 42.1, "y": 65.9},
+            {"zone": "Testvale", "x": 142.1, "y": 65.9},                   # off the map
+            {"zone": "Testvale", "x": 42.1, "y": -1},
+            {"zone": "Testvale", "x": "42.1", "y": 65.9},                  # not a number
+            {"zone": "Testvale", "x": 42.1, "y": 65.9, "label": "L" * 49}, # label too long
+            "Testvale 42.1, 65.9",                                         # not an object
+        ]
+        for where in bad:
+            p, _ = self.gen(where)
+            self.assertNotEqual(p.returncode, 0, where)
+            self.assertIn("where", p.stderr, where)
+            self.assertIn("t-inn", p.stderr, where)
+
