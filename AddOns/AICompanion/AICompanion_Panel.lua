@@ -268,7 +268,8 @@ function Panel.model(plans, firstName, store, ticks, adviceFor, ruleFor)
     local sources = plans.sources
     local f = Panel.facts(store) or Panel.facts({ snapshot = {} })
     local m = { name = firstName, asOf = plans.asOf, hasPlan = type(plan) == "table", sections = {} }
-    m.headline = (m.hasPlan and Panel.headline(plan)) or ("No plan for " .. tostring(firstName) .. " yet. The Items tab shows the built-in advice.")
+    local own = m.hasPlan and Panel.headline(plan) or nil
+    m.headline = own or ("No plan for " .. tostring(firstName) .. " yet. The Items tab shows the built-in advice.")
     m.takenAt = type(store) == "table" and type(store.snapshot) == "table" and store.snapshot.takenAtText or nil
     local function section(key) local t = {} m.sections[key] = t return t end
     if m.hasPlan then
@@ -282,6 +283,12 @@ function Panel.model(plans, firstName, store, ticks, adviceFor, ruleFor)
             end
         end
         m.progress = { done = #done, total = #open + #done }
+        if #open == 0 and #done > 0 then
+            -- the headline describes steps that are all done now; it no longer fits the list
+            m.headline = "You have done every step in this plan. Type /aic save for your next one."
+        else
+            m.headlineIsPlan = own ~= nil
+        end
         if m.progress.total > 0 then
             t[#t + 1] = { kind = "progress", title = ("%d of %d done"):format(#done, m.progress.total) }
         end
@@ -684,7 +691,8 @@ render = function()
     if not m then return end
     local title = "AI Companion" .. DOT .. tostring(m.name)
     if frame.SetTitle then frame:SetTitle(title) elseif frame.titleText then frame.titleText:SetText(title) end
-    frame.headline:SetText(m.headline or "")
+    -- the plan's own headline is labelled as the player's plan, so it does not read as a stray line
+    frame.headline:SetText((m.headlineIsPlan and "|cffffd100Your plan:|r " or "") .. (m.headline or ""))
     frame.footer:SetText(Panel.footer(m.takenAt, m.asOf, date("%Y-%m-%d")))
     if frame.reloadButton then
         local active = core().reminderActive
