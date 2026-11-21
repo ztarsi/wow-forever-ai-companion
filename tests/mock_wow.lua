@@ -489,6 +489,22 @@ C_Traits = {
         end
         return out
     end,
+    -- One talent per tree, holding the points spent there (issue #57). W.talentPoints maps a tree
+    -- name to its points, for example { Marksmanship = 5 }; trees not named have none.
+    GetTreeNodes = function(treeID)
+        if treeID ~= 801 or W.talentTrees == false then return {} end
+        local out = {}
+        for i = 1, #(W.talentTrees or { 1, 2, 3 }) do out[#out + 1] = 9100 + i end
+        return out
+    end,
+    GetNodeInfo = function(configID, nodeID)
+        local i = nodeID - 9100
+        local names = W.talentTrees or { "Beast Mastery", "Marksmanship", "Survival" }
+        if configID ~= 7001 or not names[i] then return nil end
+        local points = (W.talentPoints or {})[names[i]] or 0
+        return { ID = nodeID, isVisible = true, ranksPurchased = points, currentRank = points, activeRank = points,
+                 maxRanks = 30, groupIDs = { 900 + i }, entryIDs = {} }
+    end,
 }
 -- The group roles this class can fill (a hunter: damage only).
 function UnitGetAvailableRoles(unit)

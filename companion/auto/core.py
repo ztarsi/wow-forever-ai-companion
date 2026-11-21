@@ -323,8 +323,10 @@ def changes(old, new, seen_zones, cfg):
 
 def goals_text(g):
     """The character's goals in a few words, as the add-on writes them; "" for none. The 0.15.0
-    'direction' (main = { name = class }) is no goal and reads as none."""
-    if not isinstance(g, dict):
+    'direction' (main = { name = class }) is no goal and reads as none. A suggestion (source
+    "default" or "companion", issue #57) is not the player's goal either: applying one must not
+    start a run, or each suggestion the companion writes would pay for the next run."""
+    if not isinstance(g, dict) or g.get("source") in ("default", "companion"):
         return ""
     parts = []
     t = g.get("talents") if isinstance(g.get("talents"), dict) else {}
