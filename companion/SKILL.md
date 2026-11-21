@@ -237,13 +237,14 @@ Choose the action for **now**. "Needed at skill 55" while the character is at 39
 
 ### Character goals
 
-The player sets each character's goals in the panel's **Goals** window (`/aic goals`). They are what the player wants from this character, and they decide what the plan puts first.
+The player sets each character's goals in the panel's **Goals** window (`/aic goals`). They are what the player wants from this character, and they decide what the plan puts first. Until the player chooses, the character still has a talent direction: a suggestion from the add-on or from you (see "Suggested talents").
 
 `characters["<Name>@<Realm>"].goals` holds any of:
 - `talents`: `{ main, second }`, talent trees as the game names them (a priest: Discipline, Holy, Shadow). Dual specialization opens at level 40 [F], so a second tree is a real second build.
 - `role`: `Tank`, `Healer` or `Damage`, the role in groups; only roles the class can fill are offered.
 - `focus`: up to three of Level up, First mount, Dungeons, Raids, PvP rank, Professions, Gold, Reputation, Legacy points, Collecting.
 - `target`: one goal in the player's own words (at most 60 characters).
+- `source`: where they came from. `player`: chosen in the Goals window; goals with no `source` were saved before 0.17.0 and are the player's too. `default`: the add-on took the talent tree holding the most spent points. `companion`: the add-on applied your `suggestedTalents`. A suggestion holds only `talents`.
 - `setAt`, `setAtText`, and `previous`: the goals before the last change, in a few words.
 
 A `goals` with only `main = { name = <class> }` was written by version 0.15.0 and is no goal; treat it as none.
@@ -266,13 +267,30 @@ How to plan with them:
   - **Collecting:** the mounts, pets or items the player names; look up where each comes from.
 - **The player's own goal comes first when it is concrete.** Break it into steps; if it is unclear, ask in a blind spot.
 - **Say when the plan follows the goals.** The headline says so ("Planned for Holy, healing in dungeons, working towards your first mount."), and `goalsUsed` in the plan file records them in a few words. When the goals differ from `goalsUsed`, re-plan and say in your reply what changed.
-- **No goals:** advise from what the snapshot shows, and add one blind spot, "Set your goals in the panel's Goals window", until the player sets some.
+- **Suggested talents are a direction, not the player's choice.** Plan for them as for chosen ones, and say "suggested" where the headline names the tree. Do not ask the player to set goals: no blind spot about it. The player changes them in the Goals window whenever they like.
+
+#### Suggested talents
+
+While the player has not chosen (`goals` missing, or `source` is `default` or `companion`), write `suggestedTalents` for the character in `plans.json`: `{"main": "<tree>", "second": "<tree>"}`, `second` optional.
+- **Names:** exactly as the snapshot's `talents.trees[].groupDisplay[].displayName` gives them. The add-on ignores any other name.
+- **What the add-on does with it:**
+  - With talent points spent, the tree holding the most points is the main tree, whatever you suggest. A tie counts as no points.
+  - With no points spent (or a tie), your `main` is the main tree.
+  - Your `second` is added either way, unless it equals the main tree.
+  - It never replaces the player's own goals.
+- **Choosing `main` with no points spent:** from the snapshot alone.
+  - The role the class can fill alone: a class with a tank or healing tree and nothing in the snapshot pointing there gets its damage tree.
+  - The gear and weapons the character uses.
+  - The tree the game's own guide for the class levels with. Look it up and label it (rule 3, rule 13).
+- **Choosing `second`:** the tree that covers what the main one does not. A second role in groups, or a solo tree for a group-role main.
+- **When to re-choose:** only when the snapshot contradicts the suggestion: points spent in another tree, gear for another role, or the player's own words in `questions`. Otherwise keep it, so the plan stays steady. Say in your reply when you changed it.
+- **Never** write `suggestedTalents` for a character whose goals are the player's (`source` is `player` or missing with goals set). Drop it from the plan once they are.
 
 Sources for the [F] points: https://kami-labs.fr/en/wow-forever/wow-forever-niveau-40-monture-double-specialisation/ (dual spec, mount at 40), https://games.gg/world-of-warcraft/guides/wow-forever-mount-cost-level-40-riding-prices-and-trainers/ (riding costs, class mounts), https://www.wowhead.com/forever/news=383656/everything-you-need-to-know-for-wow-forevers-global-launch and https://www.warcrafttavern.com/forever/guides/overview/ (dungeons, raids, PvP, Legacy points).
 
 ### Plan file
 
-`plans.json` format: see `plans.example.json`. Fields per character: `headline`, `headlineShort` (optional, at most 100 characters, written to the player as "you"; the in-game panel shows it, or else the first sentence of `headline`), `next` (steps, **in the order to do them, nearest first (rule 10)**), `questing` (groups of steps), `professions`, `gear` (steps), `talents`, `bags`, `blindspots`, `items`, `shopping`, `goalsUsed` (the goals this plan was written for, in a few words; see "Character goals"). `roster` lists full character names in display order. `reported` (top level) maps each `feedback` id you filed to its issue, for example `{"20261116-101500-3": "#34"}`; the game then shows it as sent.
+`plans.json` format: see `plans.example.json`. Fields per character: `headline`, `headlineShort` (optional, at most 100 characters, written to the player as "you"; the in-game panel shows it, or else the first sentence of `headline`), `next` (steps, **in the order to do them, nearest first (rule 10)**), `questing` (groups of steps), `professions`, `gear` (steps), `talents`, `bags`, `blindspots`, `items`, `shopping`, `goalsUsed` (the goals this plan was written for, in a few words; see "Character goals"), `suggestedTalents` (`{"main", "second"}`, only while the player has not chosen; see "Suggested talents"). `roster` lists full character names in display order. `reported` (top level) maps each `feedback` id you filed to its issue, for example `{"20261116-101500-3": "#34"}`; the game then shows it as sent.
 
 Each step has `id` (unique), `title`, `detail`, `tag`, and optionally `source` (a key in `sources`), `done`, and `where` (the step's place, rule 9; `gen_data.py` refuses a malformed one).
 
@@ -299,6 +317,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.17.0 — Every character has a talent direction before the player chooses one. The add-on takes the tree holding the most spent talent points; with none spent, it applies the companion's new `suggestedTalents` from the plan (main and second tree). `goals.source` says whether goals are the add-on's default, the companion's suggestion or the player's own; the player's own are never replaced. The Goals window shows a suggestion as "(suggested)" and where it came from. The "Set your goals" blind spot is gone. Automatic updates do not run for a suggestion, only for the player's own choice. `/reload` is enough.
 - 0.16.0 — Goals redesigned after the real game showed one "direction" per class, the class itself. The Goals window now holds what WoW Forever players aim for: talent focus (main and second tree, named as the game's talent system names them; dual spec opens at 40), role in groups (only roles the class can fill), up to three things to work towards (Level up, First mount, Dungeons, Raids, PvP rank, Professions, Gold, Reputation, Legacy points, Collecting), and one goal in the player's own words. New `done` rules `{"level": n}` and `{"money": copper}`. Automatic updates describe goal changes in these terms; a 0.15.0 class-name goal counts as none. `/reload` is enough.
 - 0.15.0 — Character goals: the panel's **Goals** button (or `/aic goals`) sets a main and an optional second direction, from the class's specializations as the game names them. Saved with the character in `goals`, with what it was before; the companion plans talents, gear, quest rewards and professions around it (see "Character goals"). Automatic updates treat a set, changed or cleared goal as a reason to run, and the notification names the change. `/reload` is enough.
 - 0.14.7 — A **Waypoint** button on an opened step that has a place: one click adds a TomTom waypoint titled with the label when TomTom is installed, or sets and tracks the game's own map pin otherwise (also when TomTom fails). The zone's map is found by name in the game's map list; an unknown zone gets a chat note and no waypoint. `/reload` is enough.

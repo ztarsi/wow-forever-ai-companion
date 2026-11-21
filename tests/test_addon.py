@@ -1197,6 +1197,146 @@ class Goals(GameTest):
         self.assertTrue(any("/aic goals" in l for l in g.chat()))
 
 
+def plan_data(characters):
+    """A data add-on whose plan carries only the given characters' fields."""
+    def lua(v):
+        if isinstance(v, dict):
+            return "{ " + ", ".join("[%s] = %s" % (lua(k), lua(x)) for k, x in v.items()) + " }"
+        return '"%s"' % v
+    return "AICompanionPlans = { characters = %s }\n" % lua(characters)
+
+
+class DefaultGoals(GameTest):
+    """Issue #57: a character the player has not set goals for still has a direction. The add-on
+    takes the talent tree holding the most spent points; with none spent, the companion's
+    suggestion from the plan. A player's own choice always wins and is never replaced."""
+
+    goals, window, shown, click, save = Goals.goals, Goals.window, Goals.shown, Goals.click, Goals.save
+
+    def points(self, **trees):
+        w = W.world()
+        w["talentPoints"] = {k.replace("_", " "): v for k, v in trees.items()}
+        return w
+
+    def test_most_spent_points_sets_the_main_tree(self):
+        g = self.game(self.points(Marksmanship=7, Survival=2))
+        gl = self.goals(g)
+        self.assertEqual(gl["talents"], {"main": "Marksmanship"})
+        self.assertEqual(gl["source"], "default")
+        g.slash("/aic save")
+        self.assertEqual(self.goals(g, g.disk())["source"], "default")
+
+    def test_no_points_and_no_suggestion_sets_nothing(self):
+        g = self.game()
+        self.assertIsNone(self.goals(g))
+
+    def test_a_tie_is_not_a_direction(self):
+        g = self.game(self.points(Beast_Mastery=3, Survival=3))
+        self.assertIsNone(self.goals(g))
+
+    def test_no_points_takes_the_companions_suggestion(self):
+        data = plan_data({"Testchar": {"suggestedTalents": {"main": "Survival", "second": "Marksmanship"}}})
+        g = self.game(data_source=data)
+        gl = self.goals(g)
+        self.assertEqual(gl["talents"], {"main": "Survival", "second": "Marksmanship"})
+        self.assertEqual(gl["source"], "companion")
+
+    def test_spent_points_win_and_the_companion_adds_the_second(self):
+        data = plan_data({"Testchar": {"suggestedTalents": {"main": "Survival", "second": "Beast Mastery"}}})
+        g = self.game(self.points(Marksmanship=4), data_source=data)
+        self.assertEqual(self.goals(g)["talents"], {"main": "Marksmanship", "second": "Beast Mastery"})
+        self.assertEqual(self.goals(g)["source"], "default")
+
+    def test_a_suggestion_the_game_does_not_know_is_ignored(self):
+        data = plan_data({"Testchar": {"suggestedTalents": {"main": "Shadow", "second": "Survival"}}})
+        g = self.game(data_source=data)
+        self.assertIsNone(self.goals(g))
+        data = plan_data({"Testchar": {"suggestedTalents": {"main": "Survival", "second": "Survival"}}})
+        g = self.game(data_source=data)
+        self.assertEqual(self.goals(g)["talents"], {"main": "Survival"})
+
+    def test_the_default_follows_a_respec(self):
+        g = self.game(self.points(Marksmanship=7))
+        g.set("talentPoints", {"Survival": 9})
+        g.fire("TRAIT_CONFIG_UPDATED")
+        g.advance(6)
+        gl = self.goals(g)
+        self.assertEqual(gl["talents"], {"main": "Survival"})
+        self.assertEqual(gl["previous"], "talents Marksmanship (suggested)")
+
+    def test_the_players_choice_is_never_replaced(self):
+        g = self.game(self.points(Marksmanship=7))
+        g.slash("/aic goals")
+        self.click(g, "main", "Beast Mastery")
+        self.save(g)
+        self.assertEqual(self.goals(g)["source"], "player")
+        g.set("talentPoints", {"Survival": 9})
+        g.fire("TRAIT_CONFIG_UPDATED")
+        g.advance(6)
+        g.slash("/aic save")
+        gl = self.goals(g)
+        self.assertEqual(gl["talents"], {"main": "Beast Mastery"})
+        self.assertEqual(gl["source"], "player")
+
+    def test_goals_saved_by_0_16_count_as_the_players(self):
+        g = self.game(self.points(Marksmanship=7))
+        g.lua.execute('AICompanionDB.characters["Testchar@Testrealm"].goals = '
+                      '{ talents = { main = "Survival" }, setAtText = "x" }')
+        g.slash("/aic save")
+        self.assertEqual(self.goals(g)["talents"], {"main": "Survival"})
+        self.assertNotIn("source", self.goals(g))
+
+    def test_a_0_15_class_goal_gives_way_to_the_default(self):
+        g = Game(self.points(Marksmanship=7), saved={"AICompanionDB": 'AICompanionDB = { characters = { '
+                 '["Testchar@Testrealm"] = { goals = { main = { name = "Hunter" } } } } }'})
+        self.games.append(g)
+        g.start()
+        self.assertEqual(self.goals(g)["talents"], {"main": "Marksmanship"})
+
+    def test_window_shows_the_suggestion_and_where_it_came_from(self):
+        g = self.game(self.points(Marksmanship=7))
+        g.slash("/aic goals")
+        f = self.window(g)
+        self.assertIn("Marksmanship (suggested)", f.status.text)
+        self.assertIn("talent points you have spent", f.status.text)
+        data = plan_data({"Testchar": {"suggestedTalents": {"main": "Survival"}}})
+        g = self.game(data_source=data)
+        g.slash("/aic goals")
+        self.assertIn("Survival (suggested)", self.window(g).status.text)
+        self.assertIn("by your companion", self.window(g).status.text)
+
+    def test_saving_the_suggestion_makes_it_the_players(self):
+        g = self.game(self.points(Marksmanship=7))
+        g.slash("/aic goals")
+        self.click(g, "focus", "Dungeons")          # the suggested tree is already picked
+        self.save(g)
+        gl = self.goals(g)
+        self.assertEqual(gl["talents"], {"main": "Marksmanship"})
+        self.assertEqual(gl["source"], "player")
+        self.assertEqual(gl["previous"], "talents Marksmanship (suggested)")
+
+    def test_clearing_your_choice_brings_the_suggestion_back(self):
+        g = self.game(self.points(Marksmanship=7))
+        g.slash("/aic goals")
+        self.click(g, "main", "Survival")
+        self.save(g)
+        g.slash("/aic goals")
+        f = self.window(g)
+        f.clearButton.scripts.OnClick(f.clearButton)
+        gl = self.goals(g)
+        self.assertEqual(gl["talents"], {"main": "Marksmanship"})
+        self.assertEqual(gl["source"], "default")
+        self.assertTrue(any("goals cleared" in l and "Marksmanship" in l for l in g.chat()))
+
+    def test_clearing_a_suggestion_does_nothing(self):
+        g = self.game(self.points(Marksmanship=7))
+        g.slash("/aic goals")
+        f = self.window(g)
+        f.clearButton.scripts.OnClick(f.clearButton)
+        self.assertEqual(self.goals(g)["source"], "default")
+        self.assertFalse(any("goals cleared" in l for l in g.chat()))
+
+
 class WithoutDataFolder(GameTest):
     """Installing is one folder: AICompanion_Data appears only once the companion writes advice."""
 

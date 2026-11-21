@@ -66,6 +66,8 @@ def goals_lua(goals):
         parts.append(' target = "%s",' % goals["target"])
     if goals.get("old_main"):                                   # what 0.15.0 saved: the class name
         parts.append(' main = { name = "%s" },' % goals["old_main"])
+    if goals.get("source"):                                     # issue #57: default, companion or player
+        parts.append(' source = "%s",' % goals["source"])
     return "\n    goals = {%s setAtText = \"now\" }," % "".join(parts)
 
 
@@ -182,6 +184,22 @@ class GoalChanges(AutoTest):
         self.assertEqual(self.store().runs(), [])
         s = core.summarize("Testchar@Testrealm", {"goals": {"main": {"name": "Priest"}}}, {}, core.Config())
         self.assertEqual(s["aims"], "")
+
+    def test_a_suggested_tree_starts_nothing(self):
+        """Issue #57: the add-on's own default and the companion's suggestion are not the player's
+        goals. Applying them must not start a run, or each suggestion would pay for the next."""
+        self.decide()
+        self.write(goals={"talents": ("Holy", None), "source": "default"})
+        self.decide()
+        self.write(goals={"talents": ("Holy", "Shadow"), "source": "companion"})
+        self.decide()
+        self.assertEqual(self.store().runs(), [])
+
+    def test_the_player_choosing_starts_a_run(self):
+        self.write(goals={"talents": ("Holy", None), "source": "default"})
+        self.decide()
+        self.write(goals={"talents": ("Holy", None), "source": "player"})
+        self.assertIn("[goals] Testchar set goals: talents Holy", self.decide("dry"))
 
     def test_notification_names_the_change(self):
         with open(os.path.join(self.companion, "plans.json"), "w") as f:

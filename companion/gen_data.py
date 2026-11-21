@@ -40,7 +40,8 @@ def q(s):
     for a, b in REPL.items(): s = s.replace(a, b)
     s = s.encode("ascii", "ignore").decode().replace("|", "/")  # the game treats | as a formatting escape
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
-PLAN_KEYS = ["headline", "headlineShort", "next", "questing", "professions", "gear", "talents", "bags", "blindspots"]
+PLAN_KEYS = ["headline", "headlineShort", "next", "questing", "professions", "gear", "talents", "bags", "blindspots",
+             "suggestedTalents"]
 def lua(v, indent="    "):
     """A JSON value as a Lua literal. Strings go through q(), so they are plain ASCII."""
     if isinstance(v, bool): return "true" if v else "false"
@@ -95,6 +96,14 @@ plans = {}
 for cname, c in d.get("characters", {}).items():
     p = {k: c[k] for k in PLAN_KEYS if c.get(k) not in (None, "", [], {})}
     check_places(cname, p)
+    if "suggestedTalents" in p:   # the companion's main and second talent tree, while the player has not chosen
+        st = p["suggestedTalents"]
+        ok = (isinstance(st, dict) and set(st) <= {"main", "second"}
+              and all(isinstance(st.get(k), str) and 0 < len(st[k].strip()) <= 40 for k in st)
+              and "main" in st and st.get("second") != st["main"])
+        if not ok:
+            sys.exit("bad \"suggestedTalents\" for %s: use {\"main\": \"Tree\", \"second\": \"Other tree\"}, the talent "
+                     "trees as the snapshot names them; \"second\" is optional and differs from \"main\"" % cname)
     assert len(p.get("headlineShort", "")) <= 100, "headlineShort over 100 characters for %s" % cname
     if p: plans[cname] = p
 # Feedback the player left with /aic feedback that the companion has filed: entry id -> issue ("#34").

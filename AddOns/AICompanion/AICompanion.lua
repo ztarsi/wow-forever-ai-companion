@@ -5,7 +5,7 @@
 
 local ADDON_NAME, ns = ...
 ns = type(ns) == "table" and ns or {}
-local VERSION = "0.16.0"
+local VERSION = "0.17.0"
 local PREFIX = "|cff66ccffAI Companion|r: "
 
 local DB            -- AICompanionDB once loaded
@@ -746,6 +746,8 @@ local function worldDataReady()
     return type(slots) == "number" and slots > 0
 end
 
+local applyDefaultGoals    -- defined with the goals (issue #57); runs after each snapshot
+
 local function takeSnapshot(reason)
     if not DB or not charKey then return nil end
     if not worldDataReady() then
@@ -776,6 +778,10 @@ local function takeSnapshot(reason)
         end
     end
     store.snapshot = snap
+    if applyDefaultGoals then
+        local okGoals, goalsErr = pcall(applyDefaultGoals, store, snap)
+        if not okGoals then snap.errors.goals = tostring(goalsErr) end
+    end
     DB.lastCharacter = charKey
     DB.lastSnapshotAt = snap.takenAt
     lastSnapshotAt = snap.takenAt
@@ -1943,27 +1949,60 @@ local goalsFrame
 local pick = { focus = {} }
 
 -- The class's talent trees: Forever's talent system lists them as the display groups of the class
--- tree, each with a displayName and an orderIndex (C_Traits.GetGroupDisplayInfoByTreeID).
-local function talentTrees()
-    local names, seen = {}, {}
-    if not (C_Traits and C_ClassTalents) then return names end
-    local configID = try(C_ClassTalents.GetActiveConfigID)
-    local cfg = configID and try(C_Traits.GetConfigInfo, configID)
-    if type(cfg) ~= "table" then return names end
-    for _, treeID in ipairs(type(cfg.treeIDs) == "table" and cfg.treeIDs or {}) do
-        local groups = try(C_Traits.GetGroupDisplayInfoByTreeID, treeID)
+-- tree, each with a groupID, a displayName and an orderIndex (C_Traits.GetGroupDisplayInfoByTreeID).
+-- groupLists: one list of display groups per tree. Returns the names in order and name -> groupID;
+-- nothing unless there are two to four, which is what a class has.
+local function treeGroups(groupLists)
+    local names, ids = {}, {}
+    for _, groups in ipairs(groupLists) do
         local sorted = {}
         for _, gr in ipairs(type(groups) == "table" and groups or {}) do
             if type(gr) == "table" and plainText(gr.displayName) then sorted[#sorted + 1] = gr end
         end
         table.sort(sorted, function(a, b) return (tonumber(a.orderIndex) or 0) < (tonumber(b.orderIndex) or 0) end)
         for _, gr in ipairs(sorted) do
-            if not seen[gr.displayName] then seen[gr.displayName] = true names[#names + 1] = gr.displayName end
+            if not ids[gr.displayName] then ids[gr.displayName] = gr.groupID or false names[#names + 1] = gr.displayName end
         end
     end
-    -- three or so named trees is what a class has; anything else is not the talent trees
-    if #names < 2 or #names > 4 then return {} end
-    return names
+    if #names < 2 or #names > 4 then return {}, {} end
+    return names, ids
+end
+
+local function talentTrees()
+    if not (C_Traits and C_ClassTalents) then return {} end
+    local configID = try(C_ClassTalents.GetActiveConfigID)
+    local cfg = configID and try(C_Traits.GetConfigInfo, configID)
+    if type(cfg) ~= "table" then return {} end
+    local lists = {}
+    for _, treeID in ipairs(type(cfg.treeIDs) == "table" and cfg.treeIDs or {}) do
+        lists[#lists + 1] = try(C_Traits.GetGroupDisplayInfoByTreeID, treeID)
+    end
+    return (treeGroups(lists))
+end
+
+-- The same trees from a snapshot's talents, and the points spent in each: the ranks of the
+-- talents whose groupIDs name the tree's group.
+local function spentByTree(talents)
+    local lists, nodes = {}, {}
+    for _, tree in ipairs(type(talents) == "table" and type(talents.trees) == "table" and talents.trees or {}) do
+        if type(tree) == "table" then
+            lists[#lists + 1] = tree.groupDisplay
+            for _, n in ipairs(type(tree.nodes) == "table" and tree.nodes or {}) do nodes[#nodes + 1] = n end
+        end
+    end
+    local names, ids = treeGroups(lists)
+    local spent = {}
+    for _, name in ipairs(names) do
+        local points = 0
+        for _, n in ipairs(nodes) do
+            local rank = type(n) == "table" and tonumber(n.rank) or 0
+            for _, gid in ipairs(type(n) == "table" and type(n.groupIDs) == "table" and n.groupIDs or {}) do
+                if ids[name] and gid == ids[name] then points = points + (rank or 0) break end
+            end
+        end
+        spent[name] = points
+    end
+    return names, spent
 end
 
 local function roleOptions()
@@ -1980,7 +2019,8 @@ local function goalsText(g)
     if type(g) ~= "table" then return "" end
     local parts = {}
     local t = type(g.talents) == "table" and g.talents or nil
-    if t and t.main then parts[#parts + 1] = "talents " .. t.main .. (t.second and (", second " .. t.second) or "") end
+    local suggested = (g.source == "default" or g.source == "companion") and " (suggested)" or ""
+    if t and t.main then parts[#parts + 1] = "talents " .. t.main .. (t.second and (", second " .. t.second) or "") .. suggested end
     if g.role then parts[#parts + 1] = "role " .. g.role end
     if type(g.focus) == "table" and #g.focus > 0 then parts[#parts + 1] = "working towards " .. table.concat(g.focus, ", ") end
     if g.target then parts[#parts + 1] = "your goal: " .. g.target end
@@ -1989,18 +2029,63 @@ end
 
 local function hasGoals(g) return goalsText(g) ~= "" end
 
+-- The player chose these goals in the Goals window. Goals saved before 0.17.0 have no source and
+-- were the player's too. A suggestion (source "default" or "companion") is not the player's.
+local function playersGoals(g)
+    return hasGoals(g) and (g.source == nil or g.source == "player")
+end
+
 -- Saves the picked goals (nil clears). Returns true when it changed anything.
 local function saveGoals(new)
     local store = charStore()
     local old = store.goals
+    if new == nil and not playersGoals(old) then return false end     -- a suggestion is not cleared
     if goalsText(new) == goalsText(old) then return false end
     local g = new or {}
+    if new then g.source = "player" end
     g.setAt, g.setAtText = time(), date("%Y-%m-%d %H:%M:%S")
     if hasGoals(old) then g.previous = goalsText(old) end
     store.goals = g
     note("goals " .. goalsText(new))
     if not (InCombatLockdown and InCombatLockdown()) then takeSnapshot("goals") end
     return true
+end
+
+-- Issue #57: until the player chooses, the character still has a direction. The main tree is the
+-- one holding the most spent talent points (a tie is no direction); with none spent, the
+-- companion's suggestion from the plan (suggestedTalents). The companion's second tree is added
+-- either way. Only names the game lists as this class's trees are used. Never replaces the
+-- player's own goals.
+applyDefaultGoals = function(store, snap)
+    local old = store.goals
+    if playersGoals(old) then return end
+    local names, spent = spentByTree(snap and snap.talents)
+    local known = {}
+    for _, n in ipairs(names) do known[n] = true end
+    local main, best, tie = nil, 0, false
+    for _, n in ipairs(names) do
+        if spent[n] > best then main, best, tie = n, spent[n], false
+        elseif spent[n] == best and best > 0 then tie = true end
+    end
+    if tie then main = nil end
+    local source = main and "default" or nil
+    local plans = type(AICompanionPlans) == "table" and type(AICompanionPlans.characters) == "table" and AICompanionPlans.characters
+    local p = plans and plans[(charKey or ""):match("^[^@]+") or ""]
+    local sug = type(p) == "table" and type(p.suggestedTalents) == "table" and p.suggestedTalents or {}
+    if not main and known[sug.main] then main, source = sug.main, "companion" end
+    local second = (main and known[sug.second] and sug.second ~= main) and sug.second or nil
+    if not main then
+        if type(old) == "table" and (old.source == "default" or old.source == "companion") then
+            store.goals = { previous = goalsText(old), setAt = time(), setAtText = date("%Y-%m-%d %H:%M:%S") }
+        end
+        return
+    end
+    local new = { talents = { main = main, second = second }, source = source }
+    if goalsText(new) == goalsText(old) and type(old) == "table" and old.source == source then return end
+    new.setAt, new.setAtText = time(), date("%Y-%m-%d %H:%M:%S")
+    if hasGoals(old) then new.previous = goalsText(old) end
+    store.goals = new
+    if note then note("goals suggested: " .. goalsText(new)) end
 end
 
 local function pickedGoals()
@@ -2094,7 +2179,12 @@ local function showGoals()
         f.clearButton:SetPoint("BOTTOMLEFT", 12, 12)
         f.cancelButton:SetScript("OnClick", function() f:Hide() end)
         f.clearButton:SetScript("OnClick", function()
-            if saveGoals(nil) then say("goals cleared. Type /aic save to tell your companion.") end
+            if saveGoals(nil) then
+                local now = charStore().goals
+                local t = type(now) == "table" and not playersGoals(now) and type(now.talents) == "table" and now.talents.main
+                say("goals cleared" .. (t and ("; the suggested " .. t .. " talents stand until you choose") or "")
+                    .. ". Type /aic save to tell your companion.")
+            end
             f:Hide()
         end)
         f.saveButton:SetScript("OnClick", function()
@@ -2149,6 +2239,12 @@ local function showGoals()
     f.title:SetText("AI Companion: goals for " .. tostring((charKey or ""):match("^[^@]+") or ""))
     local cur = charStore().goals
     if not hasGoals(cur) then cur = nil end
+    local origin = ""
+    if cur and cur.source == "default" then
+        origin = " Suggested from the talent points you have spent; choose and Save to make it yours."
+    elseif cur and cur.source == "companion" then
+        origin = " Suggested by your companion; choose and Save to make it yours."
+    end
     pick = { focus = {} }
     if cur then
         local t = type(cur.talents) == "table" and cur.talents or {}
@@ -2156,7 +2252,7 @@ local function showGoals()
         for _, v in ipairs(type(cur.focus) == "table" and cur.focus or {}) do pick.focus[v] = true end
     end
     f.targetBox:SetText(cur and cur.target or "")
-    f.status:SetText(cur and ("Now: " .. goalsText(cur) .. ".") or "No goals set yet.")
+    f.status:SetText(cur and ("Now: " .. goalsText(cur) .. "." .. origin) or "No goals set yet.")
     refreshGoals()
     f:Show()
 end

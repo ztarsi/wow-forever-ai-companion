@@ -931,6 +931,37 @@ class StepPlaces(PanelTest):
             self.assertIn("t-inn", p.stderr, where)
 
 
+class SuggestedTalents(PanelTest):
+    """Issue #57: the companion suggests a main and second talent tree per character in the plan;
+    the generator checks it and the add-on applies it while the player has not chosen."""
+
+    def gen(self, suggestion):
+        plan = {"characters": {"Testchar": {"headline": "Plan.", "suggestedTalents": suggestion}}}
+        d = tempfile.mkdtemp()
+        src, out = os.path.join(d, "plans.json"), os.path.join(d, "AICompanion_Data.lua")
+        with open(src, "w", encoding="utf-8") as f:
+            json.dump(plan, f)
+        p = subprocess.run([sys.executable, os.path.join(ROOT, "companion/gen_data.py"), src, out],
+                           capture_output=True, text=True)
+        text = open(out, encoding="utf-8").read() if p.returncode == 0 else ""
+        return p, text
+
+    def test_the_suggestion_reaches_the_game(self):
+        p, text = self.gen({"main": "Survival", "second": "Marksmanship"})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        g = self.game(data_source=text)
+        gl = g.db()["characters"]["Testchar@Testrealm"]["goals"]
+        self.assertEqual(gl["talents"], {"main": "Survival", "second": "Marksmanship"})
+        self.assertEqual(gl["source"], "companion")
+
+    def test_generator_refuses_a_bad_suggestion(self):
+        for bad in ("Survival", {"second": "Survival"}, {"main": ""}, {"main": "S" * 41},
+                    {"main": "Survival", "second": "Survival"}, {"main": "Survival", "third": "x"}):
+            p, _ = self.gen(bad)
+            self.assertNotEqual(p.returncode, 0, bad)
+            self.assertIn("suggestedTalents", p.stderr, bad)
+
+
 class WaypointButton(PanelTest):
     """Issue #45: a Waypoint button on an opened step with a place: TomTom's arrow, or the game's own map pin."""
 
