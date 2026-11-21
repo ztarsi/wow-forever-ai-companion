@@ -274,16 +274,21 @@ function Panel.model(plans, firstName, store, ticks, adviceFor, ruleFor)
     local function section(key) local t = {} m.sections[key] = t return t end
     if m.hasPlan then
         local t = section("next")
-        local open, done = {}, {}
+        -- steps the player put off ("Do later"): kept in the plan, listed under Later
+        local later = type(store) == "table" and type(store.later) == "table" and store.later or {}
+        local open, put, done = {}, {}, {}
         for i, step in ipairs(list(plan.next)) do
             if type(step) == "table" then
                 local line = stepLine(step, f, ticks, sources)
                 line.number = i
-                if line.done then done[#done + 1] = line else open[#open + 1] = line end
+                line.deferrable = line.id ~= nil and not line.done
+                if line.done then done[#done + 1] = line
+                elseif line.id ~= nil and later[line.id] ~= nil then line.later = true put[#put + 1] = line
+                else open[#open + 1] = line end
             end
         end
-        m.progress = { done = #done, total = #open + #done }
-        if #open == 0 and #done > 0 then
+        m.progress = { done = #done, total = #open + #put + #done }
+        if #open == 0 and #put == 0 and #done > 0 then
             -- the headline describes steps that are all done now; it no longer fits the list
             m.headline = "You have done every step in this plan. Type /aic save for your next one."
         else
@@ -294,6 +299,10 @@ function Panel.model(plans, firstName, store, ticks, adviceFor, ruleFor)
         end
         if open[1] then open[1].isNext = true end
         for _, l in ipairs(open) do t[#t + 1] = l end
+        if #put > 0 then
+            t[#t + 1] = { kind = "divider", title = "Later" }
+            for _, l in ipairs(put) do t[#t + 1] = l end
+        end
         if #done > 0 then
             t[#t + 1] = { kind = "divider", title = "Done" }
             for _, l in ipairs(done) do t[#t + 1] = l end
@@ -415,6 +424,24 @@ local function currentModel()
 end
 Panel.currentModel = currentModel
 
+-- Puts a Do next step off (on = true) or brings it back. Saved with the character as
+-- later[id] = { title, atText }, so the companion sees what the player put off.
+function Panel.setLater(id, title, on)
+    local DB = core().db and core().db()
+    local _, key = firstName()
+    if type(DB) ~= "table" or not key or id == nil then return end
+    DB.characters = type(DB.characters) == "table" and DB.characters or {}
+    local store = type(DB.characters[key]) == "table" and DB.characters[key] or {}
+    DB.characters[key] = store
+    store.later = type(store.later) == "table" and store.later or {}
+    if on then
+        store.later[id] = { title = title, atText = date("%Y-%m-%d %H:%M:%S") }
+    else
+        store.later[id] = nil
+        if next(store.later) == nil then store.later = nil end
+    end
+end
+
 local function hasFile(path)
     local id = type(GetFileIDFromPath) == "function" and GetFileIDFromPath(path) or nil
     return type(id) == "number" and id > 0
@@ -466,7 +493,8 @@ function Panel.rows(m, key, open)
             if l.source then more[#more + 1] = l.source end
             add({ key = rkey, text = (l.number and (l.number .. ". ") or "") .. l.title, style = "step",
                   sub = (open == rkey and #more > 0) and table.concat(more, "\n") or nil,
-                  expandable = #more > 0,
+                  expandable = #more > 0 or l.deferrable == true,
+                  defer = (open == rkey and l.deferrable) and { id = l.id, title = l.title, later = l.later == true } or nil,
                   check = l.kind == "step" and { id = l.id, done = l.done, auto = l.auto } or nil,
                   place = (open == rkey) and l.place or nil,
                   done = l.done, isNext = l.isNext })
@@ -533,6 +561,9 @@ local function rowFrame(i)
     r.waypoint:SetSize(90, 20)
     r.waypoint:SetText("Waypoint")
     r.waypoint:Hide()
+    r.defer = CreateFrame("Button", nil, r, "UIPanelButtonTemplate")      -- Do later / Do now
+    r.defer:SetSize(90, 20)
+    r.defer:Hide()
     r.line = r:CreateTexture(nil, "ARTWORK")             -- the "Done" divider rule
     r.line:SetHeight(1)
     r.line:SetColorTexture(1, 1, 1, 0.15)
@@ -661,10 +692,27 @@ local function layout(rows, width, ticks)
                 if not ok then say("could not set the waypoint: " .. tostring(err)) end
             end)
             f.waypoint:Show()
-            h = h + 26
         else
             f.waypoint:Hide()
         end
+        -- an opened Do next step: put it off to the Later group, or bring it back
+        if r.defer then
+            local d = r.defer
+            f.defer:ClearAllPoints()
+            if f.waypoint:IsShown() then f.defer:SetPoint("LEFT", f.waypoint, "RIGHT", 6, 0)
+            else f.defer:SetPoint("TOPLEFT", f, "TOPLEFT", x + 8, -h) end
+            f.defer:SetText(d.later and "Do now" or "Do later")
+            f.defer:SetScript("OnClick", function()
+                local ok, err = pcall(Panel.setLater, d.id, d.title, not d.later)
+                if not ok then say("could not move the step: " .. tostring(err)) end
+                expanded = nil
+                render()
+            end)
+            f.defer:Show()
+        else
+            f.defer:Hide()
+        end
+        if f.waypoint:IsShown() or f.defer:IsShown() then h = h + 26 end
         f:SetHeight(h)
         f:SetScript("OnClick", function()
             if not expandable then return end

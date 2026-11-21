@@ -114,6 +114,7 @@ AICompanionDB
   questions       questions left with /aic ask
   feedback        the last 30 problems and ideas left with /aic feedback: id, atText, kind (problem, idea or feedback), text, addonVersion, clientVersion, zone, subZone, inCombat, lastAction, lastBlocked, lastEventError, and issue once filed. File each one ("Reporting problems and requests").
     goals         what the player set in the Goals window (see "Character goals")
+    later         Do next steps the player put off with the panel's "Do later" button: later["<step id>"] = { title, atText } (see "Steps put off")
   blockedActions  the last 20 actions the game blocked and blamed on the add-on: event, func, atText, inCombat, lastAction, addonVersion. Report any entry as an issue.
   tooltipHook     "ok" when the tooltip feature registered
 ```
@@ -288,6 +289,15 @@ While the player has not chosen (`goals` missing, or `source` is `default` or `c
 
 Sources for the [F] points: https://kami-labs.fr/en/wow-forever/wow-forever-niveau-40-monture-double-specialisation/ (dual spec, mount at 40), https://games.gg/world-of-warcraft/guides/wow-forever-mount-cost-level-40-riding-prices-and-trainers/ (riding costs, class mounts), https://www.wowhead.com/forever/news=383656/everything-you-need-to-know-for-wow-forevers-global-launch and https://www.warcrafttavern.com/forever/guides/overview/ (dungeons, raids, PvP, Legacy points).
 
+### Steps put off
+
+On the panel's Do next tab, the player can open a step and press **Do later**. The step moves to a "Later" group at the bottom of the list, and `characters["<Name>@<Realm>"].later` records it by step `id`. **Do now** brings it back.
+- **Keep a step that was put off in `next` with the same `id`.** The panel keeps it under Later. A new `id` brings it back to the top, so give one only when there is a real reason, and say why in your reply.
+- **Plan the rest as if it were not there.** It is never first and never in the headline. Do not repeat it as another step or a blind spot.
+- **Read it as a preference.** When the player put off a kind of step (all the profession steps, say), keep that kind out of the headline and the top of the list until they bring one back. Say in your reply what you kept back for later.
+- **Say so when waiting has a cost:** a quest that will turn grey, a trainer rank that gates the next one. One line in your reply, not a change to the list.
+- An entry whose `id` is no longer in the plan means nothing.
+
 ### Plan file
 
 `plans.json` format: see `plans.example.json`. Fields per character: `headline`, `headlineShort` (optional, at most 100 characters, written to the player as "you"; the in-game panel shows it after the label "Your plan:", or else the first sentence of `headline`. Either one is a plain sentence that says what to do next and where, as in "Train Leatherworking at the Ironforge bank, then hearth to Auberdine and hand in six quests." Never planner shorthand such as "Leatherworking at the bank first, then hearth for six hand-ins."), `next` (steps, **in the order to do them, nearest first (rule 10)**), `questing` (groups of steps), `professions`, `gear` (steps), `talents`, `bags`, `blindspots`, `items`, `shopping`, `goalsUsed` (the goals this plan was written for, in a few words; see "Character goals"), `suggestedTalents` (`{"main", "second"}`, only while the player has not chosen; see "Suggested talents"). `roster` lists full character names in display order. `reported` (top level) maps each `feedback` id you filed to its issue, for example `{"20261116-101500-3": "#34"}`; the game then shows it as sent.
@@ -317,6 +327,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.18.0 — "Do later" on the panel's Do next tab: open a step and press **Do later** to move it to a "Later" group at the bottom of the list; **Do now** brings it back. Saved with the character in `later`, so the companion plans around it (see "Steps put off"). Every open Do next step can now be opened for this button. Putting a step off does not start an automatic update. `/reload` is enough.
 - 0.17.1 — The panel's headline reads as what it is: the companion's plan, labelled "Your plan:". A headline written as planner shorthand looked like a stray instruction; `headlineShort` and the first sentence of `headline` are now plain sentences to the player. When every Do next step is done, the panel says so and asks for `/aic save` instead of keeping the finished plan's headline. `/reload` is enough.
 - 0.17.0 — Every character has a talent direction before the player chooses one. The add-on takes the tree holding the most spent talent points; with none spent, it applies the companion's new `suggestedTalents` from the plan (main and second tree). `goals.source` says whether goals are the add-on's default, the companion's suggestion or the player's own; the player's own are never replaced. The Goals window shows a suggestion as "(suggested)" and where it came from. The "Set your goals" blind spot is gone. Automatic updates do not run for a suggestion, only for the player's own choice. `/reload` is enough.
 - 0.16.0 — Goals redesigned after the real game showed one "direction" per class, the class itself. The Goals window now holds what WoW Forever players aim for: talent focus (main and second tree, named as the game's talent system names them; dual spec opens at 40), role in groups (only roles the class can fill), up to three things to work towards (Level up, First mount, Dungeons, Raids, PvP rank, Professions, Gold, Reputation, Legacy points, Collecting), and one goal in the player's own words. New `done` rules `{"level": n}` and `{"money": copper}`. Automatic updates describe goal changes in these terms; a 0.15.0 class-name goal counts as none. `/reload` is enough.

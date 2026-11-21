@@ -875,10 +875,22 @@ class LongLines(PanelTest):
     def test_short_line_without_details_does_not_open(self):
         g = self.game(data_source=data_file(self.plan()))
         self.open(g)
-        r = self.row(g, "11. Hearth home")
+        self.panel(g).select("gear")
+        r = self.row(g, "Ranged: Hunting Bow")
         self.assertFalse(r.arrow.shown)
         r.scripts.OnClick(r)
-        self.assertFalse(self.row(g, "11. Hearth home").sub.shown)
+        self.assertFalse(self.row(g, "Ranged: Hunting Bow").sub.shown)
+
+    def test_a_do_next_step_without_details_opens_to_its_do_later_button(self):
+        g = self.game(data_source=data_file(self.plan()))
+        self.open(g)
+        r = self.row(g, "11. Hearth home")
+        self.assertTrue(r.arrow.shown)
+        r.scripts.OnClick(r)
+        r = self.row(g, "11. Hearth home")
+        self.assertFalse(r.sub.shown)                              # nothing more to read
+        self.assertTrue(r.defer.shown)
+        self.assertEqual(r.defer.text, "Do later")
 
 
 class StepPlaces(PanelTest):
@@ -986,6 +998,90 @@ class SuggestedTalents(PanelTest):
             p, _ = self.gen(bad)
             self.assertNotEqual(p.returncode, 0, bad)
             self.assertIn("suggestedTalents", p.stderr, bad)
+
+
+class DoLater(PanelTest):
+    """A Do next step the player does not feel like doing now goes to a Later group at the bottom
+    of the list, with the step saved so the companion knows. One click brings it back."""
+
+    def start(self):
+        g = self.game(data_source=data_file())
+        f = self.open(g)
+        return g, f
+
+    def button(self, g, text):
+        return g.lua.eval('''(function(t)
+            for _, fr in ipairs(Mock.frames) do
+                if fr.kind == "Button" and fr.text == t and fr.shown then return fr end
+            end end)''')(text)
+
+    def rows(self, f):
+        return [(r["text"], r.get("isNext", False)) for r in to_py(f.lastRows)]
+
+    def later(self, g, source=None):
+        return (source or g.db())["characters"]["Testchar@Testrealm"].get("later")
+
+    def put_off(self, g, step):
+        self.panel(g).expand(step)
+        b = self.button(g, "Do later")
+        self.assertIsNotNone(b, "no Do later button on " + step)
+        b.scripts.OnClick(b)
+
+    def test_a_step_put_off_moves_to_later(self):
+        g, f = self.start()
+        self.put_off(g, "t-bow")
+        rows = self.rows(f)
+        texts = [t for t, _ in rows]
+        self.assertNotEqual(texts[1], "1. Equip the Hunting Bow")
+        self.assertTrue(rows[1][1], "the next open step is now Next")
+        later, done = texts.index("Later"), texts.index("Done")
+        self.assertEqual(texts[later + 1], "1. Equip the Hunting Bow")
+        self.assertLess(later, done)
+        self.assertEqual(texts[0], "3 of 10 done")                 # still part of the plan
+        saved = self.later(g)["t-bow"]
+        self.assertEqual(saved["title"], "Equip the Hunting Bow")
+        self.assertIn("atText", saved)
+
+    def test_the_companion_sees_it_after_save(self):
+        g, f = self.start()
+        self.put_off(g, "t-boar")
+        g.slash("/aic save")
+        self.assertIn("t-boar", self.later(g, g.disk()))
+        f = self.open(g)
+        self.assertIn("Later", [t for t, _ in self.rows(f)])        # still put off after the reload
+
+    def test_bring_it_back(self):
+        g, f = self.start()
+        self.put_off(g, "t-bow")
+        self.panel(g).expand("t-bow")
+        self.assertIsNone(self.button(g, "Do later"))
+        b = self.button(g, "Do now")
+        b.scripts.OnClick(b)
+        rows = self.rows(f)
+        self.assertEqual(rows[1], ("1. Equip the Hunting Bow", True))
+        self.assertNotIn("Later", [t for t, _ in rows])
+        self.assertNotIn("t-bow", self.later(g) or {})
+
+    def test_every_open_step_can_be_put_off(self):
+        g, f = self.start()
+        self.put_off(g, "t-eat")                                    # a step with nothing more to show
+
+    def test_not_for_done_steps_or_other_tabs(self):
+        g, f = self.start()
+        self.panel(g).expand("t-first")                             # done
+        self.assertIsNone(self.button(g, "Do later"))
+        self.panel(g).select("questing")
+        self.panel(g).expand("q1")
+        self.assertIsNone(self.button(g, "Do later"))
+
+    def test_a_step_done_while_put_off_shows_as_done(self):
+        g, f = self.start()
+        self.put_off(g, "t-eat")
+        g.lua.execute('AICompanionDB.panel.ticks["Testchar@Testrealm"]["t-eat"] = true')   # ticked by hand
+        self.panel(g).expand(None)
+        texts = [t for t, _ in self.rows(f)]
+        self.assertNotIn("Later", texts)
+        self.assertGreater(texts.index("4. Eat before the fight"), texts.index("Done"))
 
 
 class WaypointButton(PanelTest):
