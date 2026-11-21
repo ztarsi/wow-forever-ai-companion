@@ -50,12 +50,24 @@ def snapshot_lua(level=21, zone="Testvale", quests=(("101", "Boar Trouble", Fals
 
 
 def goals_lua(goals):
-    """Issue #51: (main, second) as the add-on saves them in characters[...].goals; None for no goals."""
+    """Issue #51: goals as the add-on saves them in characters[...].goals; None for no goals.
+    goals: dict with any of talents=(main, second), role, focus=[...], target."""
     if goals is None:
         return ""
-    main, second = goals
-    part = lambda k, v: (' %s = { name = "%s" },' % (k, v)) if v else ""
-    return "\n    goals = {%s%s setAtText = \"now\" }," % (part("main", main), part("second", second))
+    parts = []
+    if goals.get("talents"):
+        main, second = goals["talents"]
+        parts.append(' talents = { main = "%s"%s },' % (main, ', second = "%s"' % second if second else ""))
+    if goals.get("role"):
+        parts.append(' role = "%s",' % goals["role"])
+    if goals.get("focus"):
+        parts.append(" focus = { %s }," % ", ".join('"%s"' % f for f in goals["focus"]))
+    if goals.get("target"):
+        parts.append(' target = "%s",' % goals["target"])
+    if goals.get("old_main"):                                   # what 0.15.0 saved: the class name
+        parts.append(' main = { name = "%s" },' % goals["old_main"])
+    return "\n    goals = {%s setAtText = \"now\" }," % "".join(parts)
+
 
 
 class AutoTest(unittest.TestCase):
@@ -121,54 +133,69 @@ class AutoTest(unittest.TestCase):
 class GoalChanges(AutoTest):
     """Issue #51: a new or changed goal is a real change; the notification names it."""
 
+    HEAL = {"talents": ("Holy", "Shadow"), "role": "Healer", "focus": ["First mount", "Dungeons"]}
+
     def test_setting_goals_starts_a_run(self):
         self.decide()
-        self.write(goals=("Balance", "Restoration"))
+        self.write(goals=self.HEAL)
         self.decide()
         runs = self.store().runs()
         self.assertEqual([r["kinds"] for r in runs], [["goals"]])
         prompt = self.claude_args()["args"][self.claude_args()["args"].index("-p") + 1]
-        self.assertIn("Testchar set goals: main Balance, second Restoration", prompt)
+        self.assertIn("Testchar set goals: talents Holy, second Shadow; role Healer; "
+                      "working towards First mount, Dungeons", prompt)
 
-    def test_switching_main_direction(self):
-        self.write(goals=("Balance", None))
+    def test_changing_goals(self):
+        self.write(goals=self.HEAL)
         self.decide()
-        self.write(goals=("Feral", "Restoration"))
-        out = self.decide("dry")
-        self.assertIn("[goals] Testchar switched from Balance to Feral (second: Restoration)", out)
+        self.write(goals={"talents": ("Shadow", None), "role": "Damage", "focus": ["Level up"], "target": "60 by Friday"})
+        self.assertIn("[goals] Testchar changed goals to: talents Shadow; role Damage; working towards Level up; "
+                      "your goal: 60 by Friday (was: talents Holy, second Shadow; role Healer; working towards "
+                      "First mount, Dungeons)", self.decide("dry"))
 
     def test_clearing_goals(self):
-        self.write(goals=("Balance", None))
+        self.write(goals=self.HEAL)
         self.decide()
-        self.write(goals=(None, None))
+        self.write(goals={})
         self.assertIn("[goals] Testchar cleared their goals", self.decide("dry"))
 
     def test_unchanged_goals_start_nothing(self):
-        self.write(goals=("Balance", "Restoration"))
+        self.write(goals=self.HEAL)
         self.decide()
-        self.write(goals=("Balance", "Restoration"))
+        self.write(goals=self.HEAL)
         self.decide()
         self.assertEqual(self.store().runs(), [])
 
     def test_a_state_from_before_goals_does_not_spend_a_run(self):
         """An older saved state has no goals at all: the first look at them is a baseline (rule 12)."""
         old = core.summarize("Testchar@Testrealm", {"snapshot": {}}, {}, core.Config())
-        old.pop("goals", None)
-        new = dict(old, goals={"main": "Balance", "second": None})
+        old.pop("aims", None)
+        new = dict(old, aims="role Healer")
         self.assertEqual(core.changes(old, new, set(), core.Config()), [])
+
+    def test_the_first_versions_class_name_is_no_goal(self):
+        """0.15.0 saved the class name as a direction; it reads as no goal and starts nothing."""
+        self.write(goals={"old_main": "Priest"})
+        self.decide()
+        self.write(goals={"old_main": "Priest"})
+        self.decide()
+        self.assertEqual(self.store().runs(), [])
+        s = core.summarize("Testchar@Testrealm", {"goals": {"main": {"name": "Priest"}}}, {}, core.Config())
+        self.assertEqual(s["aims"], "")
 
     def test_notification_names_the_change(self):
         with open(os.path.join(self.companion, "plans.json"), "w") as f:
             json.dump({"characters": {"Testchar": {"headline": "Old plan."}}}, f)
-        self.write(goals=("Balance", None))
+        self.write(goals={"talents": ("Holy", None)})
         self.decide()
-        self.write(goals=("Feral", None))
+        self.write(goals={"talents": ("Shadow", None)})
         notes = []
         buf = io.StringIO()
         with redirect_stdout(buf):
             core.decide(self.cfg(), "now", notify=lambda *a: notes.append(a), out=print)
         self.assertTrue(notes, buf.getvalue())
-        self.assertIn("Testchar switched from Balance to Feral: talent and gear advice updated.", notes[0][1])
+        self.assertIn("Testchar changed goals to: talents Shadow (was: talents Holy): advice updated for the new goals.",
+                      notes[0][1])
 
 
 class FindsThings(AutoTest):

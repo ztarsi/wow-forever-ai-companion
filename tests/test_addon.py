@@ -1015,7 +1015,8 @@ class PetTraining(GameTest):
 
 
 class Goals(GameTest):
-    """Issue #51: the player sets each character's main and second direction from a Goals window."""
+    """Issue #51, second design: goals a WoW Forever player really has. Talent focus (main tree and a
+    second for dual spec), group role, what they are working towards, and one goal in their own words."""
 
     def goals(self, g, source=None):
         return (source or g.db())["characters"]["Testchar@Testrealm"].get("goals")
@@ -1023,121 +1024,172 @@ class Goals(GameTest):
     def window(self, g):
         return g.lua.globals().AICompanionGoalsFrame
 
-    def pick(self, g, row, name):
-        f = self.window(g)
-        buttons = to_py(g.lua.eval("(function() local o = {} for i, b in ipairs(AICompanionGoalsFrame.%sButtons) do if b.shown then o[i] = b.text end end return o end)()" % row))
-        for i, text in (buttons.items() if isinstance(buttons, dict) else enumerate(buttons, 1)):
-            if text == name:
-                b = g.lua.eval("AICompanionGoalsFrame.%sButtons[%d]" % (row, i))
-                b.scripts.OnClick(b)
-                return
-        raise AssertionError("no %s button %r in %r" % (row, name, buttons))
+    def shown(self, g, row):
+        return to_py(g.lua.eval("(function() local o = {} for _, b in ipairs(AICompanionGoalsFrame.%sButtons) do "
+                                "if b.shown then o[#o + 1] = b.text end end return o end)()" % row)) or []
+
+    def click(self, g, row, text):
+        n = g.lua.eval("(function(t) for i, b in ipairs(AICompanionGoalsFrame.%sButtons) do "
+                       "if b.shown and b.text == t then return i end end end)" % row)(text)
+        if n is None:
+            raise AssertionError("no %s button %r in %r" % (row, text, self.shown(g, row)))
+        b = g.lua.eval("AICompanionGoalsFrame.%sButtons[%d]" % (row, n))
+        b.scripts.OnClick(b)
+
+    def type_target(self, g, text):
+        box = self.window(g).targetBox
+        box.SetText(box, text)
 
     def save(self, g):
         f = self.window(g)
         f.saveButton.scripts.OnClick(f.saveButton)
 
-    def test_options_are_the_games_own_names(self):
+    def test_talent_trees_are_the_games_own_names_in_order(self):
         g = self.game()
         g.slash("/aic goals")
-        f = self.window(g)
-        self.assertTrue(f.shown)
+        self.assertTrue(self.window(g).shown)
         self.assertTrue(g.lua.eval("AICompanionGoalsFrame.parent == UIParent"))
-        names = to_py(g.lua.eval("(function() local o = {} for _, b in ipairs(AICompanionGoalsFrame.mainButtons) do if b.shown then o[#o + 1] = b.text end end return o end)()"))
-        self.assertEqual(names, ["Beast Mastery", "Marksmanship", "Survival"])
+        self.assertEqual(self.shown(g, "main"), ["Beast Mastery", "Marksmanship", "Survival"])
+        self.assertEqual(self.shown(g, "second"), ["Beast Mastery", "Marksmanship", "Survival", "None"])
 
-    def test_set_main_and_second(self):
+    def test_roles_are_only_those_the_class_can_fill(self):
         g = self.game()
         g.slash("/aic goals")
-        self.pick(g, "main", "Marksmanship")
-        self.pick(g, "second", "Survival")
+        self.assertEqual(self.shown(g, "role"), ["Damage", "None"])
+        w = W.world()
+        w["roles"] = {"heal": True, "dps": True}
+        w["talentTrees"] = ["Discipline", "Holy", "Shadow"]
+        g = self.game(w)
+        g.slash("/aic goals")
+        self.assertEqual(self.shown(g, "role"), ["Healer", "Damage", "None"])
+        self.assertEqual(self.shown(g, "main"), ["Discipline", "Holy", "Shadow"])
+
+    def test_working_towards_lists_forever_goals(self):
+        g = self.game()
+        g.slash("/aic goals")
+        self.assertEqual(self.shown(g, "focus"), ["Level up", "First mount", "Dungeons", "Raids", "PvP rank",
+                                                  "Professions", "Gold", "Reputation", "Legacy points", "Collecting"])
+
+    def test_save_every_part(self):
+        g = self.game()
+        g.slash("/aic goals")
+        self.click(g, "main", "Marksmanship")
+        self.click(g, "second", "Survival")
+        self.click(g, "role", "Damage")
+        self.click(g, "focus", "Dungeons")
+        self.click(g, "focus", "First mount")
+        self.type_target(g, "Epic mount before raids open")
         self.save(g)
         gl = self.goals(g)
-        self.assertEqual((gl["main"]["name"], gl["main"]["specID"], gl["second"]["name"]), ("Marksmanship", 254, "Survival"))
+        self.assertEqual(gl["talents"], {"main": "Marksmanship", "second": "Survival"})
+        self.assertEqual(gl["role"], "Damage")
+        self.assertEqual(gl["focus"], ["First mount", "Dungeons"])          # in the window's order
+        self.assertEqual(gl["target"], "Epic mount before raids open")
         self.assertIn("setAtText", gl)
         self.assertNotIn("previous", gl)
         self.assertFalse(self.window(g).shown)
         self.assertTrue(any("goals saved" in l and "/aic save" in l for l in g.chat()))
         g.slash("/aic save")
-        self.assertEqual(self.goals(g, g.disk())["main"]["name"], "Marksmanship")
+        self.assertEqual(self.goals(g, g.disk())["focus"], ["First mount", "Dungeons"])
 
-    def test_main_only(self):
+    def test_at_most_three_things_to_work_towards(self):
         g = self.game()
         g.slash("/aic goals")
-        self.pick(g, "main", "Survival")
+        for label in ("Level up", "Dungeons", "Gold", "PvP rank"):
+            self.click(g, "focus", label)
+        self.assertTrue(any("up to three" in l for l in g.chat()))
+        self.click(g, "focus", "Gold")                                      # a second click takes it off
         self.save(g)
-        self.assertNotIn("second", self.goals(g))
+        self.assertEqual(self.goals(g)["focus"], ["Level up", "Dungeons"])
 
-    def test_second_cannot_equal_main(self):
+    def test_second_tree_cannot_equal_main(self):
         g = self.game()
         g.slash("/aic goals")
-        self.pick(g, "second", "Survival")
-        self.pick(g, "main", "Survival")              # choosing it as main clears it as second
+        self.click(g, "second", "Survival")
+        self.click(g, "main", "Survival")
         self.save(g)
-        gl = self.goals(g)
-        self.assertEqual(gl["main"]["name"], "Survival")
-        self.assertNotIn("second", gl)
+        self.assertEqual(self.goals(g)["talents"], {"main": "Survival"})
 
-    def test_change_records_the_previous_choice(self):
+    def test_a_goal_in_your_own_words_alone_is_enough(self):
         g = self.game()
         g.slash("/aic goals")
-        self.pick(g, "main", "Marksmanship")
+        self.type_target(g, "  " + "x" * 80 + "  ")
         self.save(g)
-        g.slash("/aic goals")
-        self.pick(g, "main", "Beast Mastery")
-        self.pick(g, "second", "Marksmanship")
-        self.save(g)
-        gl = self.goals(g)
-        self.assertEqual(gl["main"]["name"], "Beast Mastery")
-        self.assertEqual(gl["previous"], {"main": "Marksmanship"})
+        self.assertEqual(self.goals(g)["target"], "x" * 60)                 # trimmed and kept short
 
-    def test_clear(self):
-        g = self.game()
-        g.slash("/aic goals")
-        self.pick(g, "main", "Marksmanship")
-        self.save(g)
-        g.slash("/aic goals")
-        f = self.window(g)
-        f.clearButton.scripts.OnClick(f.clearButton)
-        gl = self.goals(g)
-        self.assertNotIn("main", gl)
-        self.assertEqual(gl["previous"], {"main": "Marksmanship"})
-        self.assertTrue(any("goals cleared" in l for l in g.chat()))
-
-    def test_save_without_a_main_does_nothing(self):
+    def test_nothing_chosen_saves_nothing(self):
         g = self.game()
         g.slash("/aic goals")
         self.save(g)
         self.assertIsNone(self.goals(g))
         self.assertTrue(self.window(g).shown)
-        self.assertTrue(any("choose a main direction" in l for l in g.chat()))
+        self.assertTrue(any("choose at least one goal" in l for l in g.chat()))
+
+    def test_change_records_what_it_was(self):
+        g = self.game()
+        g.slash("/aic goals")
+        self.click(g, "main", "Marksmanship")
+        self.click(g, "focus", "Dungeons")
+        self.save(g)
+        g.slash("/aic goals")
+        self.click(g, "main", "Beast Mastery")
+        self.save(g)
+        gl = self.goals(g)
+        self.assertEqual(gl["talents"]["main"], "Beast Mastery")
+        self.assertEqual(gl["previous"], "talents Marksmanship; working towards Dungeons")
+
+    def test_clear(self):
+        g = self.game()
+        g.slash("/aic goals")
+        self.click(g, "focus", "Gold")
+        self.save(g)
+        g.slash("/aic goals")
+        f = self.window(g)
+        f.clearButton.scripts.OnClick(f.clearButton)
+        gl = self.goals(g)
+        self.assertNotIn("focus", gl)
+        self.assertEqual(gl["previous"], "working towards Gold")
+        self.assertTrue(any("goals cleared" in l for l in g.chat()))
 
     def test_cancel_keeps_what_was_there(self):
         g = self.game()
         g.slash("/aic goals")
-        self.pick(g, "main", "Marksmanship")
+        self.click(g, "focus", "Gold")
         f = self.window(g)
         f.cancelButton.scripts.OnClick(f.cancelButton)
         self.assertIsNone(self.goals(g))
 
-    def test_window_shows_the_saved_choice(self):
+    def test_window_shows_the_saved_goals(self):
         g = self.game()
         g.slash("/aic goals")
-        self.pick(g, "main", "Marksmanship")
-        self.pick(g, "second", "Survival")
+        self.click(g, "main", "Marksmanship")
+        self.click(g, "role", "Damage")
+        self.click(g, "focus", "Raids")
+        self.type_target(g, "Onyxia")
         self.save(g)
         g.slash("/aic goals")
-        self.assertEqual(self.window(g).status.text, "Now: main Marksmanship, second Survival.")
+        f = self.window(g)
+        self.assertEqual(f.status.text, "Now: talents Marksmanship; role Damage; working towards Raids; your goal: Onyxia.")
+        self.assertEqual(f.targetBox.GetText(f.targetBox), "Onyxia")
 
-    def test_class_with_no_listed_directions(self):
+    def test_talents_not_unlocked_yet(self):
         w = W.world()
-        w["noSpecs"] = True
+        w["talentTrees"] = False
         g = self.game(w)
         g.slash("/aic goals")
         f = self.window(g)
-        self.assertTrue(f.shown)
-        self.assertFalse(f.saveButton.shown)
-        self.assertIn("lists no directions", f.status.text)
+        self.assertEqual(self.shown(g, "main"), [])
+        self.assertIn("talent trees", f.treeNote.text)
+        self.click(g, "focus", "Level up")
+        self.save(g)
+        self.assertEqual(self.goals(g)["focus"], ["Level up"])
+
+    def test_goal_from_the_first_version_is_not_shown_as_a_goal(self):
+        """0.15.0 saved the class name as a 'direction'; it is no goal and is dropped."""
+        g = self.game()
+        g.lua.execute('AICompanionDB.characters["Testchar@Testrealm"].goals = { main = { name = "Hunter" }, setAtText = "x" }')
+        g.slash("/aic goals")
+        self.assertEqual(self.window(g).status.text, "No goals set yet.")
 
     def test_help_lists_goals(self):
         g = self.game()
