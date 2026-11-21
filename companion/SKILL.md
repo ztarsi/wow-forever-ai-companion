@@ -113,7 +113,7 @@ AICompanionDB
   questTitles     quest ID to title
   questions       questions left with /aic ask
   feedback        the last 30 problems and ideas left with /aic feedback: id, atText, kind (problem, idea or feedback), text, addonVersion, clientVersion, zone, subZone, inCombat, lastAction, lastBlocked, lastEventError, and issue once filed. File each one ("Reporting problems and requests").
-    goals         the direction the player chose in the Goals window (see "Character goals")
+    goals         what the player set in the Goals window (see "Character goals")
   blockedActions  the last 20 actions the game blocked and blamed on the add-on: event, func, atText, inCombat, lastAction, addonVersion. Report any entry as an issue.
   tooltipHook     "ok" when the tooltip feature registered
 ```
@@ -143,7 +143,7 @@ Known limits:
 | `/aic reminder on` / `off` | About 2 minutes after `/aic save`, reminds the player in chat that new advice may be ready, and the panel shows a "Load new advice" button that reloads. On by default when data was written by an automatic update. |
 | Key binding | Key Bindings > AddOns > "AI Companion: open or close the panel". The player picks the key; none is set by default. |
 | `/aic sort debug` | What the bag sort found (bag windows) and why it last stopped. Saved in `AICompanionDB.sortDebug` for you to read. |
-| `/aic goals` | Opens the Goals window: this character's main and second direction. Also the Goals button on the panel. Saved in `goals`; reaches disk at the next save. |
+| `/aic goals` | Opens the Goals window: talent focus (main and second tree), role in groups, up to three things to work towards, and one goal in the player's own words. Also the Goals button on the panel. Saved in `goals`; reaches disk at the next save. |
 | `/aic feedback` | Opens a window to report a problem or share an idea; also the Feedback button on the panel. Saved in `feedback`; reaches disk at the next save. |
 | `/aic bug <text>`, `/aic idea <text>` | The same in one line. |
 | `/aic copy` | Text summary the player can paste into chat. |
@@ -237,26 +237,48 @@ Choose the action for **now**. "Needed at skill 55" while the character is at 39
 
 ### Character goals
 
-The player sets each character's direction in the panel's **Goals** window (`/aic goals`): a main direction and an optional second, from the class's specializations as the game names them.
+The player sets each character's goals in the panel's **Goals** window (`/aic goals`). They are what the player wants from this character, and they decide what the plan puts first.
 
-- `characters["<Name>@<Realm>"].goals`: `main` and `second` (each `{ name, specID, role }`), `setAt`, `setAtText`, and `previous` (`{ main, second }`, the choice before the last change). No `main` means no goals.
-- **Talents follow the main direction.**
+`characters["<Name>@<Realm>"].goals` holds any of:
+- `talents`: `{ main, second }`, talent trees as the game names them (a priest: Discipline, Holy, Shadow). Dual specialization opens at level 40 [F], so a second tree is a real second build.
+- `role`: `Tank`, `Healer` or `Damage`, the role in groups; only roles the class can fill are offered.
+- `focus`: up to three of Level up, First mount, Dungeons, Raids, PvP rank, Professions, Gold, Reputation, Legacy points, Collecting.
+- `target`: one goal in the player's own words (at most 60 characters).
+- `setAt`, `setAtText`, and `previous`: the goals before the last change, in a few words.
+
+A `goals` with only `main = { name = <class> }` was written by version 0.15.0 and is no goal; treat it as none.
+
+How to plan with them:
+- **Talents** follow the main tree. From level 40, give a second build for the second tree.
 - **Gear:**
-  - Recommend for the main direction first.
-  - Pieces worth keeping only for the second direction are `bank` (or `carry` if the player swaps often), with a tip like "Off-set: Restoration". Never `sell` them.
-- **Quest rewards and professions** follow the main direction, then the second.
-- **Say when the plan follows the goals.** The headline says so ("Planned for Balance, with Restoration second."), and `goalsUsed` in the plan file records the goals a plan was written for. When `goals` differs from `goalsUsed`, re-plan talents, gear, rewards and bags, and say in your reply what changed ("You switched from Balance to Feral: talent and gear advice updated.").
-- **No goals:** advise as before from the talents already spent, and add one blind spot, "Set your character's direction in Goals on the panel", until the player sets one.
+  - Stats come from the main tree and the role: a tank wants stamina and armour; a healer wants intellect, spirit and healing; damage wants the class's damage stats.
+  - Pieces worth keeping only for the second tree are `bank` (or `carry` if the player swaps often), with a tip like "Off-set: Shadow". Never `sell` them.
+- **Each thing the player is working towards becomes steps in `next` or `questing`,** with a `done` rule where the snapshot can tell. Look the details up and label them (rule 3, rule 13). Most Forever figures so far come from beta guides.
+  - **Level up:** the quickest quest order from where the player stands (rule 10); `{"level": n}`.
+  - **First mount:** riding at level 40, about 100 gold [F]. Paladins and warlocks get theirs from a class quest [F]. Steps: save the gold (`{"money": copper}`), reach 40 (`{"level": 40}`), the riding trainer with coordinates.
+  - **Dungeons:** the dungeons that fit the level, the quests to pick up before going, and the upgrades they drop. In a group the player is their `role`.
+  - **Raids:** level 60 and the preparation each raid needs. Forever's raids open on dates; look them up.
+  - **PvP rank:** battlegrounds; rank has a weekly cap [F], so starting early counts.
+  - **Professions:** go through "Professions".
+  - **Gold:** what sells (auction prices in the snapshot) and where to farm; `{"money": copper}`.
+  - **Reputation:** the faction's quests and turn-ins, including the trade factions' Merchant's Favor [F].
+  - **Legacy points:** levels 25, 45 and 60, and the final boss of every level 46–60 dungeon [F].
+  - **Collecting:** the mounts, pets or items the player names; look up where each comes from.
+- **The player's own goal comes first when it is concrete.** Break it into steps; if it is unclear, ask in a blind spot.
+- **Say when the plan follows the goals.** The headline says so ("Planned for Holy, healing in dungeons, working towards your first mount."), and `goalsUsed` in the plan file records them in a few words. When the goals differ from `goalsUsed`, re-plan and say in your reply what changed.
+- **No goals:** advise from what the snapshot shows, and add one blind spot, "Set your goals in the panel's Goals window", until the player sets some.
+
+Sources for the [F] points: https://kami-labs.fr/en/wow-forever/wow-forever-niveau-40-monture-double-specialisation/ (dual spec, mount at 40), https://games.gg/world-of-warcraft/guides/wow-forever-mount-cost-level-40-riding-prices-and-trainers/ (riding costs, class mounts), https://www.wowhead.com/forever/news=383656/everything-you-need-to-know-for-wow-forevers-global-launch and https://www.warcrafttavern.com/forever/guides/overview/ (dungeons, raids, PvP, Legacy points).
 
 ### Plan file
 
-`plans.json` format: see `plans.example.json`. Fields per character: `headline`, `headlineShort` (optional, at most 100 characters, written to the player as "you"; the in-game panel shows it, or else the first sentence of `headline`), `next` (steps, **in the order to do them, nearest first (rule 10)**), `questing` (groups of steps), `professions`, `gear` (steps), `talents`, `bags`, `blindspots`, `items`, `shopping`, `goalsUsed` (`{ "main", "second" }`, the goals this plan was written for; see "Character goals"). `roster` lists full character names in display order. `reported` (top level) maps each `feedback` id you filed to its issue, for example `{"20261116-101500-3": "#34"}`; the game then shows it as sent.
+`plans.json` format: see `plans.example.json`. Fields per character: `headline`, `headlineShort` (optional, at most 100 characters, written to the player as "you"; the in-game panel shows it, or else the first sentence of `headline`), `next` (steps, **in the order to do them, nearest first (rule 10)**), `questing` (groups of steps), `professions`, `gear` (steps), `talents`, `bags`, `blindspots`, `items`, `shopping`, `goalsUsed` (the goals this plan was written for, in a few words; see "Character goals"). `roster` lists full character names in display order. `reported` (top level) maps each `feedback` id you filed to its issue, for example `{"20261116-101500-3": "#34"}`; the game then shows it as sent.
 
 Each step has `id` (unique), `title`, `detail`, `tag`, and optionally `source` (a key in `sources`), `done`, and `where` (the step's place, rule 9; `gen_data.py` refuses a malformed one).
 
 - `tag` is one of: `game` (read from the snapshot), `lookup` (a Forever source), `classic` (an original-game source), `judgment` (your recommendation), `unverified`.
 - A source about the original game carries `"scope": "classic"`.
-- `done` is a rule the snapshot can evaluate, so the step ticks itself. Omit it only for steps the snapshot cannot detect; those get a manual tick box. Rules: `{"equipped": name}`, `{"notEquipped": name}`, `{"slotFilled": slot}`, `{"notInBags": [names]}`, `{"questDone": title}`, `{"skill": [profession, rank]}`, `{"skillCapAbove": [profession, cap]}`, `{"talentsSpent": n}`, `{"freeSlots": n}`, `{"repaired": percent}`, `{"captured": "bank" | "trainers" | "completed" | "recipes:<Profession>"}`, `{"all": [rules]}`.
+- `done` is a rule the snapshot can evaluate, so the step ticks itself. Omit it only for steps the snapshot cannot detect; those get a manual tick box. Rules: `{"equipped": name}`, `{"notEquipped": name}`, `{"slotFilled": slot}`, `{"notInBags": [names]}`, `{"questDone": title}`, `{"skill": [profession, rank]}`, `{"skillCapAbove": [profession, cap]}`, `{"talentsSpent": n}`, `{"level": n}`, `{"money": copper}`, `{"freeSlots": n}`, `{"repaired": percent}`, `{"captured": "bank" | "trainers" | "completed" | "recipes:<Profession>"}`, `{"all": [rules]}`.
 
 ### Dashboard
 
@@ -277,6 +299,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.16.0 — Goals redesigned after the real game showed one "direction" per class, the class itself. The Goals window now holds what WoW Forever players aim for: talent focus (main and second tree, named as the game's talent system names them; dual spec opens at 40), role in groups (only roles the class can fill), up to three things to work towards (Level up, First mount, Dungeons, Raids, PvP rank, Professions, Gold, Reputation, Legacy points, Collecting), and one goal in the player's own words. New `done` rules `{"level": n}` and `{"money": copper}`. Automatic updates describe goal changes in these terms; a 0.15.0 class-name goal counts as none. `/reload` is enough.
 - 0.15.0 — Character goals: the panel's **Goals** button (or `/aic goals`) sets a main and an optional second direction, from the class's specializations as the game names them. Saved with the character in `goals`, with what it was before; the companion plans talents, gear, quest rewards and professions around it (see "Character goals"). Automatic updates treat a set, changed or cleared goal as a reason to run, and the notification names the change. `/reload` is enough.
 - 0.14.7 — A **Waypoint** button on an opened step that has a place: one click adds a TomTom waypoint titled with the label when TomTom is installed, or sets and tracks the game's own map pin otherwise (also when TomTom fails). The zone's map is found by name in the game's map list; an unknown zone gets a chat note and no waypoint. `/reload` is enough.
 - 0.14.6 — Plan steps can carry their place in `where` (zone, map coordinates, and who or what is there). An opened step shows it on its own line in the panel, for example "Innkeeper Farley — Elwynn Forest 42.1, 65.9". `gen_data.py` refuses a malformed place. Older plans work as before. `/reload` is enough.

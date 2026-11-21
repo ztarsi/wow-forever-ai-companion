@@ -474,6 +474,27 @@ local function SPECS()
                         { id = 254, name = "Marksmanship", role = "DAMAGER" },
                         { id = 255, name = "Survival", role = "DAMAGER" } }
 end
+-- The class's talent trees as Forever's talent system names them (issue #51, v2): one class tree
+-- whose display groups are the trees (Discipline, Holy, Shadow for a priest). W.talentTrees = false
+-- means talents are not unlocked yet.
+C_ClassTalents = { GetActiveConfigID = function() if W.talentTrees == false then return nil end return 7001 end }
+C_Traits = {
+    GetConfigInfo = function(id) if id == 7001 then return { name = "Talents", type = 1, treeIDs = { 801 } } end end,
+    GetGroupDisplayInfoByTreeID = function(treeID)
+        if treeID ~= 801 or W.talentTrees == false then return {} end
+        local names = W.talentTrees or { "Beast Mastery", "Marksmanship", "Survival" }
+        local out = {}
+        for i = #names, 1, -1 do        -- not in display order, as the game need not return it in order
+            out[#out + 1] = { groupID = 900 + i, treeID = 801, skillLineID = 0, orderIndex = i - 1, displayName = names[i], icon = 0 }
+        end
+        return out
+    end,
+}
+-- The group roles this class can fill (a hunter: damage only).
+function UnitGetAvailableRoles(unit)
+    local r = W.roles or { tank = false, heal = false, dps = true }
+    return r.tank == true, r.heal == true, r.dps == true
+end
 C_SpecializationInfo = {
     GetNumSpecializationsForClassID = function(classID) if classID == (C.classID or 3) then return #SPECS() end return 0 end,
     GetSpecializationInfo = function(i, isInspect, isPet, target, sex, group, classID)

@@ -87,6 +87,8 @@ function Panel.facts(store)
             f.skills[k.name] = { rank = tonumber(k.rank or k.skillRank) or 0, max = tonumber(k.maxRank or k.skillMaxRank) or 0 }
         end
     end
+    local c = type(s.character) == "table" and s.character or {}
+    f.level, f.money = tonumber(c.level), tonumber(c.money)
     local tree = type(s.talents) == "table" and list(s.talents.trees)[1] or nil
     local cur = type(tree) == "table" and list(tree.currencies)[1] or nil
     if type(cur) == "table" then f.talentsSpent = tonumber(cur.spent) or 0 end
@@ -121,6 +123,8 @@ function Panel.check(rule, f)
         return sk ~= nil and sk.max > n
     end
     if kind == "talentsSpent" then return f.talentsSpent >= (tonumber(arg) or math.huge) end
+    if kind == "level" then return f.level ~= nil and f.level >= (tonumber(arg) or math.huge) end
+    if kind == "money" then return f.money ~= nil and f.money >= (tonumber(arg) or math.huge) end
     if kind == "freeSlots" then return f.freeSlots >= (tonumber(arg) or math.huge) end
     if kind == "repaired" then return f.durability ~= nil and f.durability >= (tonumber(arg) or 101) end
     if kind == "captured" then
