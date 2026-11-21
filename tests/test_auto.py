@@ -27,14 +27,14 @@ print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "nu
 
 
 def snapshot_lua(level=21, zone="Testvale", quests=(("101", "Boar Trouble", False),), talent=0,
-                 bank="2026-11-01 10:00:00", free=10, questions=()):
+                 bank="2026-11-01 10:00:00", free=10, questions=(), goals=None):
     q = ", ".join('{ questID = %s, title = "%s", complete = %s }' % (i, t, "true" if r else "false")
                   for i, t, r in quests)
     asks = ", ".join('{ character = "Testchar@Testrealm", text = "%s" }' % t for t in questions)
     return """AICompanionDB = {
   questions = { %s },
   characters = { ["Testchar@Testrealm"] = {
-    bank = { seenAtText = "%s" },
+    bank = { seenAtText = "%s" },%s
     snapshot = {
       takenAtText = "now",
       character = { name = "Testchar", level = %d, unspentTalentPoints = %d },
@@ -46,7 +46,16 @@ def snapshot_lua(level=21, zone="Testvale", quests=(("101", "Boar Trouble", Fals
     },
   } },
 }
-""" % (asks, bank, level, talent, zone, q, free)
+""" % (asks, bank, goals_lua(goals), level, talent, zone, q, free)
+
+
+def goals_lua(goals):
+    """Issue #51: (main, second) as the add-on saves them in characters[...].goals; None for no goals."""
+    if goals is None:
+        return ""
+    main, second = goals
+    part = lambda k, v: (' %s = { name = "%s" },' % (k, v)) if v else ""
+    return "\n    goals = {%s%s setAtText = \"now\" }," % (part("main", main), part("second", second))
 
 
 class AutoTest(unittest.TestCase):
@@ -107,6 +116,59 @@ class AutoTest(unittest.TestCase):
             return None
         with open(p) as f:
             return json.load(f)
+
+
+class GoalChanges(AutoTest):
+    """Issue #51: a new or changed goal is a real change; the notification names it."""
+
+    def test_setting_goals_starts_a_run(self):
+        self.decide()
+        self.write(goals=("Balance", "Restoration"))
+        self.decide()
+        runs = self.store().runs()
+        self.assertEqual([r["kinds"] for r in runs], [["goals"]])
+        prompt = self.claude_args()["args"][self.claude_args()["args"].index("-p") + 1]
+        self.assertIn("Testchar set goals: main Balance, second Restoration", prompt)
+
+    def test_switching_main_direction(self):
+        self.write(goals=("Balance", None))
+        self.decide()
+        self.write(goals=("Feral", "Restoration"))
+        out = self.decide("dry")
+        self.assertIn("[goals] Testchar switched from Balance to Feral (second: Restoration)", out)
+
+    def test_clearing_goals(self):
+        self.write(goals=("Balance", None))
+        self.decide()
+        self.write(goals=(None, None))
+        self.assertIn("[goals] Testchar cleared their goals", self.decide("dry"))
+
+    def test_unchanged_goals_start_nothing(self):
+        self.write(goals=("Balance", "Restoration"))
+        self.decide()
+        self.write(goals=("Balance", "Restoration"))
+        self.decide()
+        self.assertEqual(self.store().runs(), [])
+
+    def test_a_state_from_before_goals_does_not_spend_a_run(self):
+        """An older saved state has no goals at all: the first look at them is a baseline (rule 12)."""
+        old = core.summarize("Testchar@Testrealm", {"snapshot": {}}, {}, core.Config())
+        old.pop("goals", None)
+        new = dict(old, goals={"main": "Balance", "second": None})
+        self.assertEqual(core.changes(old, new, set(), core.Config()), [])
+
+    def test_notification_names_the_change(self):
+        with open(os.path.join(self.companion, "plans.json"), "w") as f:
+            json.dump({"characters": {"Testchar": {"headline": "Old plan."}}}, f)
+        self.write(goals=("Balance", None))
+        self.decide()
+        self.write(goals=("Feral", None))
+        notes = []
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            core.decide(self.cfg(), "now", notify=lambda *a: notes.append(a), out=print)
+        self.assertTrue(notes, buf.getvalue())
+        self.assertIn("Testchar switched from Balance to Feral: talent and gear advice updated.", notes[0][1])
 
 
 class FindsThings(AutoTest):

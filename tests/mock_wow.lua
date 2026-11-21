@@ -466,7 +466,21 @@ function UnitName(unit)
 end
 function UnitFullName(unit) if unit == "player" then return C.name, C.realm end end
 function GetRealmName() return C.realm end
-function UnitClass(unit) if unit == "player" then return C.className, C.class end end
+function UnitClass(unit) if unit == "player" then return C.className, C.class, C.classID or 3 end end
+-- A class's specializations, as the game names them (issue #51). W.specs replaces the hunter's.
+local function SPECS()
+    if W.noSpecs then return {} end
+    return W.specs or { { id = 253, name = "Beast Mastery", role = "DAMAGER" },
+                        { id = 254, name = "Marksmanship", role = "DAMAGER" },
+                        { id = 255, name = "Survival", role = "DAMAGER" } }
+end
+C_SpecializationInfo = {
+    GetNumSpecializationsForClassID = function(classID) if classID == (C.classID or 3) then return #SPECS() end return 0 end,
+    GetSpecializationInfo = function(i, isInspect, isPet, target, sex, group, classID)
+        local sp = SPECS()[i]
+        if sp then return sp.id, sp.name, "", 0, sp.role end
+    end,
+}
 function UnitRace(unit) if unit == "player" then return C.race, C.race end end
 function UnitFactionGroup(unit) if unit == "player" then return C.faction, C.faction end end
 function UnitSex(unit) if unit == "player" then return C.sex end end

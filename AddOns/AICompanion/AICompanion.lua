@@ -5,7 +5,7 @@
 
 local ADDON_NAME, ns = ...
 ns = type(ns) == "table" and ns or {}
-local VERSION = "0.14.7"
+local VERSION = "0.15.0"
 local PREFIX = "|cff66ccffAI Companion|r: "
 
 local DB            -- AICompanionDB once loaded
@@ -1924,6 +1924,188 @@ local function showFeedback(kind)
     feedbackFrame.editBox:SetFocus()
 end
 
+-------------------------------------------------------------------------------
+-- Goals (issue #51): the direction the player wants for this character, a main and an optional
+-- second, chosen from the class's specializations as the game names them. Saved with the
+-- character in characters[...].goals; the companion plans around it and automatic updates treat
+-- a change as a reason to run. The window is the add-on's own frame on UIParent.
+-------------------------------------------------------------------------------
+
+local goalsFrame
+local goalPick = {}
+
+local function goalOptions()
+    local opts = {}
+    local _, _, classID = try(UnitClass, "player")
+    local S = C_SpecializationInfo
+    if S and type(classID) == "number" and not isSecret(classID) then
+        local n = try(S.GetNumSpecializationsForClassID, classID)
+        for i = 1, (type(n) == "number" and not isSecret(n)) and n or 0 do
+            local id, name, _, _, role = try(S.GetSpecializationInfo, i, false, false, nil, nil, nil, classID)
+            name = plainText(name)
+            if name then opts[#opts + 1] = { name = name, specID = id, role = plainText(role) } end
+        end
+    end
+    return opts
+end
+
+local function goalsNow(g)
+    if type(g) ~= "table" or type(g.main) ~= "table" then return "No goals set yet." end
+    return "Now: main " .. tostring(g.main.name) .. (type(g.second) == "table" and (", second " .. tostring(g.second.name)) or "") .. "."
+end
+
+local function previousOf(g)
+    if type(g) ~= "table" or type(g.main) ~= "table" then return nil end
+    return { main = g.main.name, second = type(g.second) == "table" and g.second.name or nil }
+end
+
+-- Saves main (and second) option records, or clears when main is nil. Returns true when it changed.
+local function saveGoals(main, second)
+    local store = charStore()
+    local old = store.goals
+    local oldMain = type(old) == "table" and type(old.main) == "table" and old.main.name or nil
+    local oldSecond = type(old) == "table" and type(old.second) == "table" and old.second.name or nil
+    if (main and main.name) == oldMain and (second and second.name) == oldSecond then return false end
+    store.goals = { main = main, second = second, setAt = time(), setAtText = date("%Y-%m-%d %H:%M:%S"),
+                    previous = previousOf(old) }
+    note("goals " .. tostring(main and main.name) .. "/" .. tostring(second and second.name))
+    if not (InCombatLockdown and InCombatLockdown()) then takeSnapshot("goals") end
+    return true
+end
+
+local function refreshGoals()
+    local f = goalsFrame
+    if not f then return end
+    for _, b in ipairs(f.mainButtons) do
+        if b.goal and b.goal.name == goalPick.main then b:LockHighlight() else b:UnlockHighlight() end
+    end
+    for _, b in ipairs(f.secondButtons) do
+        if b.goal and b.goal.name == goalPick.second then b:LockHighlight() else b:UnlockHighlight() end
+    end
+    if goalPick.second == nil then f.noneButton:LockHighlight() else f.noneButton:UnlockHighlight() end
+end
+
+local function showGoals()
+    if not DB or not charKey then return end
+    local opts = goalOptions()
+    if not goalsFrame then
+        local f = CreateFrame("Frame", "AICompanionGoalsFrame", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        f:SetSize(520, 230)
+        f:SetPoint("CENTER")
+        f:SetFrameStrata("FULLSCREEN_DIALOG")   -- above the panel, which it opens from
+        if f.SetBackdrop then
+            f:SetBackdrop({
+                bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+                edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                edgeSize = 14, insets = { left = 3, right = 3, top = 3, bottom = 3 },
+            })
+            f:SetBackdropColor(0, 0, 0, 0.92)
+        end
+        f:EnableMouse(true)
+        f:SetMovable(true)
+        f:RegisterForDrag("LeftButton")
+        f:SetScript("OnDragStart", f.StartMoving)
+        f:SetScript("OnDragStop", f.StopMovingOrSizing)
+        f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        f.title:SetPoint("TOPLEFT", 12, -10)
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", 0, 0)
+        local mainLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        mainLabel:SetPoint("TOPLEFT", 14, -40)
+        mainLabel:SetText("Main direction:")
+        local secondLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        secondLabel:SetPoint("TOPLEFT", 14, -100)
+        secondLabel:SetText("Second direction (optional):")
+        f.mainButtons, f.secondButtons = {}, {}
+        f.noneButton = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+        f.noneButton:SetSize(110, 22)
+        f.noneButton:SetText("None")
+        f.noneButton:SetScript("OnClick", function() goalPick.second = nil refreshGoals() end)
+        f.status = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        f.status:SetPoint("BOTTOMLEFT", 14, 44)
+        f.status:SetPoint("RIGHT", f, "RIGHT", -14, 0)
+        f.status:SetJustifyH("LEFT")
+        f.status:SetWordWrap(true)
+        local function button(text, w)
+            local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+            b:SetSize(w, 22)
+            b:SetText(text)
+            return b
+        end
+        f.saveButton = button("Save", 90)
+        f.saveButton:SetPoint("BOTTOMRIGHT", -12, 12)
+        f.cancelButton = button("Cancel", 90)
+        f.cancelButton:SetPoint("RIGHT", f.saveButton, "LEFT", -6, 0)
+        f.clearButton = button("Clear goals", 110)
+        f.clearButton:SetPoint("BOTTOMLEFT", 12, 12)
+        f.cancelButton:SetScript("OnClick", function() f:Hide() end)
+        f.clearButton:SetScript("OnClick", function()
+            if saveGoals(nil, nil) then say("goals cleared. Type /aic save to tell your companion.") end
+            f:Hide()
+        end)
+        if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "AICompanionGoalsFrame") end
+        goalsFrame = f
+    end
+    local f = goalsFrame
+    f.title:SetText("AI Companion: goals for " .. tostring((charKey or ""):match("^[^@]+") or ""))
+    f.options = opts
+    local function place(list, i, y, goal, onClick)
+        local b = list[i]
+        if not b then
+            b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+            b:SetSize(110, 22)
+            list[i] = b
+        end
+        b:ClearAllPoints()
+        b:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + (i - 1) * 116, y)
+        b:SetText(goal.name)
+        b.goal = goal
+        b:SetScript("OnClick", onClick)
+        b:Show()
+    end
+    for i, o in ipairs(opts) do
+        place(f.mainButtons, i, -58, o, function()
+            goalPick.main = o.name
+            if goalPick.second == o.name then goalPick.second = nil end
+            refreshGoals()
+        end)
+        place(f.secondButtons, i, -118, o, function()
+            if goalPick.main ~= o.name then goalPick.second = o.name end
+            refreshGoals()
+        end)
+    end
+    for i = #opts + 1, #f.mainButtons do f.mainButtons[i]:Hide() f.secondButtons[i]:Hide() end
+    f.noneButton:ClearAllPoints()
+    f.noneButton:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + #opts * 116, -118)
+    local cur = charStore().goals
+    goalPick.main = type(cur) == "table" and type(cur.main) == "table" and cur.main.name or nil
+    goalPick.second = type(cur) == "table" and type(cur.second) == "table" and cur.second.name or nil
+    f.saveButton:SetScript("OnClick", function()
+        local main, second
+        for _, o in ipairs(opts) do
+            if o.name == goalPick.main then main = o end
+            if o.name == goalPick.second then second = o end
+        end
+        if not main then say("choose a main direction first, then Save.") return end
+        if saveGoals(main, second) then
+            say(("goals saved: main %s%s. Type /aic save to send them to your companion."):format(
+                main.name, second and (", second " .. second.name) or ""))
+        end
+        f:Hide()
+    end)
+    if #opts == 0 then
+        f.saveButton:Hide()
+        f.noneButton:Hide()
+        f.status:SetText("The game lists no directions for your class. Tell your companion in chat instead, or with /aic ask.")
+    else
+        f.saveButton:Show()
+        f.noneButton:Show()
+        f.status:SetText(goalsNow(cur))
+    end
+    refreshGoals()
+    f:Show()
+end
+
 local function countErrors(snap)
     local n = 0
     for _ in pairs(snap.errors or {}) do n = n + 1 end
@@ -1973,6 +2155,9 @@ local function handleSlash(msg)
         else
             addFeedback(kind or "feedback", rest)
         end
+    elseif cmd == "goals" or cmd == "goal" then
+        local ok, err = pcall(showGoals)
+        if not ok then say("could not open the goals window: " .. tostring(err)) end
     elseif cmd == "ah" or cmd == "auction" then
         local days = rest:lower():match("^age%s+(%d+)$")
         if days then
@@ -2007,6 +2192,7 @@ local function handleSlash(msg)
         print("  /aic save       take a snapshot and reload so it is written to disk")
         print("  /aic copy       show a text summary you can copy and paste")
         print("  /aic ask <q>    note a question for your companion")
+        print("  /aic goals      choose this character's main and second direction (also on the panel)")
         print("  /aic feedback   report a problem or share an idea (opens a window; also on the panel)")
         print("  /aic bug <text> report a problem in one line; /aic idea <text> for an idea")
         print("  /aic ah         at an auctioneer: check prices for your bags, bank and shopping list")
@@ -2069,6 +2255,7 @@ ns.core = {
     adviceFor = adviceFor, ruleFor = ruleFor, say = say, try = try, isSecret = isSecret,
     takeSnapshot = function(reason) return takeSnapshot(reason) end,
     showFeedback = function(kind) return showFeedback(kind) end,
+    showGoals = function() return showGoals() end,
     ADVICE_LABEL = ADVICE_LABEL,
 }
 

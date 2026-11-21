@@ -46,7 +46,7 @@ This file is the whole guide. The scripts it names sit in the same folder: `gen_
 
 Run this loop at the first session, whenever the player says "refresh" after `/aic save`, and whenever they ask what to do.
 
-1. **Read the save.** Parse the SavedVariables file (see "Files" and "Snapshot format"). Note the file's modified time and each snapshot's `takenAtText`, and state the data's age when it matters. Read `questions` (left with `/aic ask`) and `blockedActions` (report any entry as an issue). **Check `feedback` first:** the player may have reported a problem or an idea in the game. File every entry not yet filed (see "Reporting problems and requests") before advising, and say in your reply which issues you filed.
+1. **Read the save.** Parse the SavedVariables file (see "Files" and "Snapshot format"). Note the file's modified time and each snapshot's `takenAtText`, and state the data's age when it matters. Read `questions` (left with `/aic ask`), `blockedActions` (report any entry as an issue), and each character's `goals` (see "Character goals"). **Check `feedback` first:** the player may have reported a problem or an idea in the game. File every entry not yet filed (see "Reporting problems and requests") before advising, and say in your reply which issues you filed.
 2. **Research.** Look up Forever sources for the character's level, zone, quests, professions and gear. Label every source (rule 3). Find coordinates for every place (rule 9). For a profession, go through "Professions" below. If you cannot browse, mark what you could not check as `unverified`. This applies to questions about the game's interface and functions as much as to quests and items (rule 13).
 3. **Write `plans.json`.** Keep one plan file per player in a private folder outside any repository, where it persists between sessions. Read the existing file first and update it: keep every other character, every source entry, and every existing step ID. Never write a plan from the current character alone and drop the rest. List every active quest with the place of its next objective before ordering (rule 10). Order `next` from where the player stands (rule 10). Format: "Plan file" below and `plans.example.json`. If the player uses automatic updates (the `auto` folder beside this file), an unattended run may also change `plans.json` and the data file: before you change `plans.json`, check that `.automation-running` is not in the plan file's folder (wait until it is gone), and re-read `plans.json` right before writing.
 4. **Generate.** `python3 gen_data.py "<private folder>/plans.json" "<game>/Interface/AddOns/AICompanion_Data/AICompanion_Data.lua"`. It refuses tips over 48 characters; shorten and run it again.
@@ -113,6 +113,7 @@ AICompanionDB
   questTitles     quest ID to title
   questions       questions left with /aic ask
   feedback        the last 30 problems and ideas left with /aic feedback: id, atText, kind (problem, idea or feedback), text, addonVersion, clientVersion, zone, subZone, inCombat, lastAction, lastBlocked, lastEventError, and issue once filed. File each one ("Reporting problems and requests").
+    goals         the direction the player chose in the Goals window (see "Character goals")
   blockedActions  the last 20 actions the game blocked and blamed on the add-on: event, func, atText, inCombat, lastAction, addonVersion. Report any entry as an issue.
   tooltipHook     "ok" when the tooltip feature registered
 ```
@@ -142,6 +143,7 @@ Known limits:
 | `/aic reminder on` / `off` | About 2 minutes after `/aic save`, reminds the player in chat that new advice may be ready, and the panel shows a "Load new advice" button that reloads. On by default when data was written by an automatic update. |
 | Key binding | Key Bindings > AddOns > "AI Companion: open or close the panel". The player picks the key; none is set by default. |
 | `/aic sort debug` | What the bag sort found (bag windows) and why it last stopped. Saved in `AICompanionDB.sortDebug` for you to read. |
+| `/aic goals` | Opens the Goals window: this character's main and second direction. Also the Goals button on the panel. Saved in `goals`; reaches disk at the next save. |
 | `/aic feedback` | Opens a window to report a problem or share an idea; also the Feedback button on the panel. Saved in `feedback`; reaches disk at the next save. |
 | `/aic bug <text>`, `/aic idea <text>` | The same in one line. |
 | `/aic copy` | Text summary the player can paste into chat. |
@@ -233,9 +235,22 @@ Choose the action for **now**. "Needed at skill 55" while the character is at 39
 - A rule stays silent when it cannot be sure. It knows item categories, not recipes, so it never says "Craft now" and never names a vendor or a quest. Those are yours to add.
 - Do not edit the rules file. If a rule is wrong for this player, write an `items` entry.
 
+### Character goals
+
+The player sets each character's direction in the panel's **Goals** window (`/aic goals`): a main direction and an optional second, from the class's specializations as the game names them.
+
+- `characters["<Name>@<Realm>"].goals`: `main` and `second` (each `{ name, specID, role }`), `setAt`, `setAtText`, and `previous` (`{ main, second }`, the choice before the last change). No `main` means no goals.
+- **Talents follow the main direction.**
+- **Gear:**
+  - Recommend for the main direction first.
+  - Pieces worth keeping only for the second direction are `bank` (or `carry` if the player swaps often), with a tip like "Off-set: Restoration". Never `sell` them.
+- **Quest rewards and professions** follow the main direction, then the second.
+- **Say when the plan follows the goals.** The headline says so ("Planned for Balance, with Restoration second."), and `goalsUsed` in the plan file records the goals a plan was written for. When `goals` differs from `goalsUsed`, re-plan talents, gear, rewards and bags, and say in your reply what changed ("You switched from Balance to Feral: talent and gear advice updated.").
+- **No goals:** advise as before from the talents already spent, and add one blind spot, "Set your character's direction in Goals on the panel", until the player sets one.
+
 ### Plan file
 
-`plans.json` format: see `plans.example.json`. Fields per character: `headline`, `headlineShort` (optional, at most 100 characters, written to the player as "you"; the in-game panel shows it, or else the first sentence of `headline`), `next` (steps, **in the order to do them, nearest first (rule 10)**), `questing` (groups of steps), `professions`, `gear` (steps), `talents`, `bags`, `blindspots`, `items`, `shopping`. `roster` lists full character names in display order. `reported` (top level) maps each `feedback` id you filed to its issue, for example `{"20261116-101500-3": "#34"}`; the game then shows it as sent.
+`plans.json` format: see `plans.example.json`. Fields per character: `headline`, `headlineShort` (optional, at most 100 characters, written to the player as "you"; the in-game panel shows it, or else the first sentence of `headline`), `next` (steps, **in the order to do them, nearest first (rule 10)**), `questing` (groups of steps), `professions`, `gear` (steps), `talents`, `bags`, `blindspots`, `items`, `shopping`, `goalsUsed` (`{ "main", "second" }`, the goals this plan was written for; see "Character goals"). `roster` lists full character names in display order. `reported` (top level) maps each `feedback` id you filed to its issue, for example `{"20261116-101500-3": "#34"}`; the game then shows it as sent.
 
 Each step has `id` (unique), `title`, `detail`, `tag`, and optionally `source` (a key in `sources`), `done`, and `where` (the step's place, rule 9; `gen_data.py` refuses a malformed one).
 
@@ -262,6 +277,7 @@ It needs Python with `lupa`. Deliver the page however the player prefers (a publ
 
 ## Changelog
 
+- 0.15.0 — Character goals: the panel's **Goals** button (or `/aic goals`) sets a main and an optional second direction, from the class's specializations as the game names them. Saved with the character in `goals`, with what it was before; the companion plans talents, gear, quest rewards and professions around it (see "Character goals"). Automatic updates treat a set, changed or cleared goal as a reason to run, and the notification names the change. `/reload` is enough.
 - 0.14.7 — A **Waypoint** button on an opened step that has a place: one click adds a TomTom waypoint titled with the label when TomTom is installed, or sets and tracks the game's own map pin otherwise (also when TomTom fails). The zone's map is found by name in the game's map list; an unknown zone gets a chat note and no waypoint. `/reload` is enough.
 - 0.14.6 — Plan steps can carry their place in `where` (zone, map coordinates, and who or what is there). An opened step shows it on its own line in the panel, for example "Innkeeper Farley — Elwynn Forest 42.1, 65.9". `gen_data.py` refuses a malformed place. Older plans work as before. `/reload` is enough.
 - 0.14.5 — The minimap button shows the AI Companion logo (an open book under a spark) inside the standard gold ring. It adds a file, `media/minimap.tga`, so it needs one full game restart; until then the button keeps the book icon.
