@@ -930,3 +930,86 @@ class StepPlaces(PanelTest):
             self.assertIn("where", p.stderr, where)
             self.assertIn("t-inn", p.stderr, where)
 
+
+class WaypointButton(PanelTest):
+    """Issue #45: a Waypoint button on an opened step with a place: TomTom's arrow, or the game's own map pin."""
+
+    PLACE = {"zone": "Elwynn Forest", "x": 42.1, "y": 65.9, "label": "Innkeeper Farley"}
+
+    def start(self, place=None, **world):
+        import copy
+        plan = copy.deepcopy(PLAN)
+        plan["characters"]["Testchar"]["next"].append(
+            {"id": "t-inn", "title": "Set your hearth", "tag": "lookup", "where": place or self.PLACE})
+        w = W.world()
+        w.update(world)
+        g = self.game(w, data_source=data_file(plan))
+        f = self.open(g)
+        self.panel(g).expand("t-inn")
+        return g, f
+
+    def button(self, g):
+        return g.lua.eval('''(function()
+            for _, fr in ipairs(Mock.frames) do
+                if fr.kind == "Button" and fr.text == "Waypoint" and fr.shown then return fr end
+            end end)()''')
+
+    def test_button_only_on_an_opened_step_with_a_place(self):
+        g, f = self.start()
+        self.assertIsNotNone(self.button(g))
+        self.panel(g).expand("t-bow")                     # a step without a place
+        self.assertIsNone(self.button(g))
+        self.panel(g).expand(None)
+        self.assertIsNone(self.button(g))
+
+    def test_tomtom_gets_one_waypoint_with_the_label(self):
+        g, f = self.start(tomtom="ok")
+        b = self.button(g)
+        b.scripts.OnClick(b)
+        wps = to_py(g.lua.globals().TomTom.waypoints)
+        self.assertEqual(len(wps), 1)
+        wp = wps[0]
+        self.assertEqual((wp["mapID"], wp["title"], wp["from"]), (1429, "Innkeeper Farley", "AI Companion"))
+        self.assertAlmostEqual(wp["x"], 0.421)
+        self.assertAlmostEqual(wp["y"], 0.659)
+        self.assertIsNone(g.M.userWaypoint)                # TomTom handled it
+        self.assertTrue(any("TomTom" in l for l in g.chat()))
+
+    def test_without_tomtom_the_games_own_pin(self):
+        g, f = self.start()
+        b = self.button(g)
+        b.scripts.OnClick(b)
+        wp = to_py(g.M.userWaypoint)
+        self.assertEqual(wp["mapID"], 1429)
+        self.assertAlmostEqual(wp["x"], 0.421)
+        self.assertAlmostEqual(wp["y"], 0.659)
+        self.assertTrue(g.M.userWaypointTracked)
+        self.assertTrue(any("Map pin set" in l for l in g.chat()))
+
+    def test_failing_tomtom_falls_back_to_the_pin(self):
+        g, f = self.start(tomtom="fails")
+        b = self.button(g)
+        b.scripts.OnClick(b)
+        self.assertEqual(to_py(g.M.userWaypoint)["mapID"], 1429)
+
+    def test_unknown_zone_says_so_and_sets_nothing(self):
+        g, f = self.start(place={"zone": "Nowhere Vale", "x": 10, "y": 20, "label": "Someone"}, tomtom="ok")
+        b = self.button(g)
+        b.scripts.OnClick(b)
+        self.assertEqual(to_py(g.lua.globals().TomTom.waypoints) or [], [])
+        self.assertIsNone(g.M.userWaypoint)
+        self.assertTrue(any("could not find the map for Nowhere Vale" in l for l in g.chat()))
+
+    def test_zone_name_is_matched_without_case(self):
+        g, f = self.start(place={"zone": "elwynn forest", "x": 42.1, "y": 65.9})
+        b = self.button(g)
+        b.scripts.OnClick(b)
+        self.assertEqual(to_py(g.M.userWaypoint)["mapID"], 1429)
+
+    def test_map_that_takes_no_pin(self):
+        g, f = self.start(noPinMaps={1429: True})
+        b = self.button(g)
+        b.scripts.OnClick(b)
+        self.assertIsNone(g.M.userWaypoint)
+        self.assertTrue(any("does not take a map pin" in l for l in g.chat()))
+
