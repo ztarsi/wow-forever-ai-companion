@@ -185,6 +185,14 @@ class GoalChanges(AutoTest):
         s = core.summarize("Testchar@Testrealm", {"goals": {"main": {"name": "Priest"}}}, {}, core.Config())
         self.assertEqual(s["aims"], "")
 
+    def test_putting_a_step_off_starts_nothing(self):
+        """"Do later" changes only the order on the panel, which already shows it; no run is paid for it."""
+        store = {"snapshot": {"character": {"level": 20}}}
+        before = core.summarize("Testchar@Testrealm", store, {}, core.Config())
+        store["later"] = {"t-lw": {"title": "Leatherworking 50", "atText": "now"}}
+        after = core.summarize("Testchar@Testrealm", store, {}, core.Config())
+        self.assertEqual(core.changes(before, after, set(), core.Config()), [])
+
     def test_a_suggested_tree_starts_nothing(self):
         """Issue #57: the add-on's own default and the companion's suggestion are not the player's
         goals. Applying them must not start a run, or each suggestion would pay for the next."""
