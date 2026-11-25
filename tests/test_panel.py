@@ -54,6 +54,9 @@ def data_file(plan=PLAN):
         return f.read()
 
 
+LABEL = "|cffffd100Your plan:|r "
+
+
 OLD_DATA_FILE = '''AICompanionShopping = {}
 AICompanionAdvice = { asOf = "Nov 1", characters = {} }
 '''
@@ -181,7 +184,7 @@ class Window(PanelTest):
         self.assertEqual(rows[1]["text"], "1. Equip the Hunting Bow")
         self.assertTrue(rows[1]["isNext"])
         self.assertNotIn("sub", rows[1])                     # one line per step until clicked
-        self.assertEqual(f.headline.text, "Level 20 hunter.")   # first sentence of the full headline
+        self.assertEqual(f.headline.text, LABEL + "Level 20 hunter.")   # first sentence of the full headline
         self.assertTrue(f.footer.text.startswith("Snapshot "))
         self.assertNotIn("Bags", f.footer.text)
         g.slash("/aic panel")
@@ -419,7 +422,30 @@ class Readability(PanelTest):
         plan["characters"]["Testchar"]["headlineShort"] = "Finish Boar Trouble, then train in Testtown."
         g = self.game(data_source=data_file(plan))
         f = self.open(g)
-        self.assertEqual(f.headline.text, "Finish Boar Trouble, then train in Testtown.")
+        self.assertEqual(f.headline.text, LABEL + "Finish Boar Trouble, then train in Testtown.")
+
+    def test_the_headline_says_it_is_your_plan(self):
+        """A bare line in the banner read like a stray instruction: it is labelled as the player's plan."""
+        g = self.game(data_source=data_file())
+        f = self.open(g)
+        self.assertTrue(f.headline.text.startswith(LABEL))
+        plan = {"characters": {"Otherchar": {"headline": "Someone else's plan."}}}
+        g = self.game(data_source=data_file(plan))
+        f = self.open(g)
+        self.assertIn("No plan for Testchar yet", f.headline.text)
+        self.assertNotIn("Your plan", f.headline.text)
+
+    def test_a_finished_plan_does_not_keep_its_old_headline(self):
+        """When every Do next step is done, the old headline no longer describes anything on the list."""
+        plan = {"characters": {"Testchar": {
+            "headlineShort": "Leatherworking at the bank first, then hearth for six hand-ins.",
+            "next": [{"id": "a", "title": "Reach level 1", "done": {"level": 1}}]}}}
+        g = self.game(data_source=data_file(plan))
+        f = self.open(g)
+        self.assertNotIn("Leatherworking", f.headline.text)
+        self.assertIn("every step", f.headline.text)
+        self.assertIn("/aic save", f.headline.text)
+        self.assertNotIn("Your plan", f.headline.text)
 
     def test_headline_never_more_than_two_lines(self):
         g = self.game(data_source=data_file())
