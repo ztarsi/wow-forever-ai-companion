@@ -271,6 +271,12 @@ function Panel.model(plans, firstName, store, ticks, adviceFor, ruleFor)
     local own = m.hasPlan and Panel.headline(plan) or nil
     m.headline = own or ("No plan for " .. tostring(firstName) .. " yet. The Items tab shows the built-in advice.")
     m.takenAt = type(store) == "table" and type(store.snapshot) == "table" and store.snapshot.takenAtText or nil
+    -- where the plan was made (basedOn.zone, from the companion) and where the player is now
+    local madeIn = m.hasPlan and type(plan.basedOn) == "table" and type(plan.basedOn.zone) == "string" and plan.basedOn.zone or nil
+    local loc = type(store) == "table" and type(store.snapshot) == "table" and type(store.snapshot.location) == "table"
+        and store.snapshot.location or nil
+    local here = loc and type(loc.zone) == "string" and loc.zone ~= "" and loc.zone or nil
+    if madeIn and here and madeIn:lower() ~= here:lower() then m.madeIn, m.here = madeIn, here end
     local function section(key) local t = {} m.sections[key] = t return t end
     if m.hasPlan then
         local t = section("next")
@@ -293,6 +299,10 @@ function Panel.model(plans, firstName, store, ticks, adviceFor, ruleFor)
             m.headline = "You have done every step in this plan. Type /aic save for your next one."
         else
             m.headlineIsPlan = own ~= nil
+        end
+        if m.madeIn then
+            t[#t + 1] = { kind = "text", title = ("You are in %s now; this plan was made in %s. Type /aic save for a plan from here.")
+                :format(m.here, m.madeIn) }
         end
         if m.progress.total > 0 then
             t[#t + 1] = { kind = "progress", title = ("%d of %d done"):format(#done, m.progress.total) }
@@ -740,7 +750,8 @@ render = function()
     local title = "AI Companion" .. DOT .. tostring(m.name)
     if frame.SetTitle then frame:SetTitle(title) elseif frame.titleText then frame.titleText:SetText(title) end
     -- the plan's own headline is labelled as the player's plan, so it does not read as a stray line
-    frame.headline:SetText((m.headlineIsPlan and "|cffffd100Your plan:|r " or "") .. (m.headline or ""))
+    local label = m.madeIn and ("|cffffd100Your plan (made in " .. m.madeIn .. "):|r ") or "|cffffd100Your plan:|r "
+    frame.headline:SetText((m.headlineIsPlan and label or "") .. (m.headline or ""))
     frame.footer:SetText(Panel.footer(m.takenAt, m.asOf, date("%Y-%m-%d")))
     if frame.reloadButton then
         local active = core().reminderActive

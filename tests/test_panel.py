@@ -1084,6 +1084,59 @@ class DoLater(PanelTest):
         self.assertGreater(texts.index("4. Eat before the fight"), texts.index("Done"))
 
 
+class PlanMadeElsewhere(PanelTest):
+    """The player logged in in Auberdine and the panel spoke of Ironforge: the plan was made when they
+    were there. The companion records where (`basedOn`); the panel says when the player has moved."""
+
+    def plan(self, based_on):
+        import copy
+        plan = copy.deepcopy(PLAN)
+        if based_on is not None:
+            plan["characters"]["Testchar"]["basedOn"] = based_on
+        return plan
+
+    def test_moved_since_the_plan_was_made(self):
+        g = self.game(data_source=data_file(self.plan({"zone": "Ironforge", "snapshot": "2026-11-21 15:22:01"})))
+        f = self.open(g)
+        self.assertTrue(f.headline.text.startswith("|cffffd100Your plan (made in Ironforge):|r "))
+        first = to_py(f.lastRows)[0]
+        self.assertIn("You are in Testvale now", first["text"])
+        self.assertIn("made in Ironforge", first["text"])
+        self.assertIn("/aic save", first["text"])
+
+    def test_same_place_says_nothing(self):
+        g = self.game(data_source=data_file(self.plan({"zone": "testvale"})))
+        f = self.open(g)
+        self.assertEqual(f.headline.text, LABEL + "Level 20 hunter.")
+        self.assertEqual(to_py(f.lastRows)[0]["text"], "3 of 10 done")
+
+    def test_a_plan_without_a_place_says_nothing(self):
+        g = self.game(data_source=data_file(self.plan(None)))
+        f = self.open(g)
+        self.assertEqual(f.headline.text, LABEL + "Level 20 hunter.")
+
+    def test_walking_back_clears_the_note(self):
+        g = self.game(data_source=data_file(self.plan({"zone": "Ironforge"})))
+        f = self.open(g)
+        g.set("zone", "Ironforge")
+        g.fire("ZONE_CHANGED_NEW_AREA")
+        g.advance(6)
+        self.panel(g).select("next")
+        self.assertEqual(f.headline.text, LABEL + "Level 20 hunter.")
+        self.assertEqual(to_py(f.lastRows)[0]["text"], "3 of 10 done")
+
+    def test_generator_checks_the_place(self):
+        for bad in ("Ironforge", {"zone": ""}, {"zone": "I" * 61}, {"snapshot": "x"}, {"zone": "Ironforge", "x": 1}):
+            d = tempfile.mkdtemp()
+            src, out = os.path.join(d, "plans.json"), os.path.join(d, "AICompanion_Data.lua")
+            with open(src, "w", encoding="utf-8") as fh:
+                json.dump(self.plan(bad), fh)
+            p = subprocess.run([sys.executable, os.path.join(ROOT, "companion/gen_data.py"), src, out],
+                               capture_output=True, text=True)
+            self.assertNotEqual(p.returncode, 0, bad)
+            self.assertIn("basedOn", p.stderr, bad)
+
+
 class WaypointButton(PanelTest):
     """Issue #45: a Waypoint button on an opened step with a place: TomTom's arrow, or the game's own map pin."""
 
