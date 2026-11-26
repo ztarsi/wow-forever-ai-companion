@@ -41,7 +41,7 @@ def q(s):
     s = s.encode("ascii", "ignore").decode().replace("|", "/")  # the game treats | as a formatting escape
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
 PLAN_KEYS = ["headline", "headlineShort", "next", "questing", "professions", "gear", "talents", "bags", "blindspots",
-             "suggestedTalents"]
+             "suggestedTalents", "basedOn"]
 def lua(v, indent="    "):
     """A JSON value as a Lua literal. Strings go through q(), so they are plain ASCII."""
     if isinstance(v, bool): return "true" if v else "false"
@@ -96,6 +96,13 @@ plans = {}
 for cname, c in d.get("characters", {}).items():
     p = {k: c[k] for k in PLAN_KEYS if c.get(k) not in (None, "", [], {})}
     check_places(cname, p)
+    if "basedOn" in p:   # where the player was in the snapshot this plan was made from
+        b = p["basedOn"]
+        ok = (isinstance(b, dict) and set(b) <= {"zone", "snapshot"} and isinstance(b.get("zone"), str)
+              and 0 < len(b["zone"].strip()) <= 60 and (b.get("snapshot") is None or isinstance(b["snapshot"], str)))
+        if not ok:
+            sys.exit("bad \"basedOn\" for %s: use {\"zone\": \"<snapshot.location.zone>\", \"snapshot\": "
+                     "\"<snapshot.takenAtText>\"}" % cname)
     if "suggestedTalents" in p:   # the companion's main and second talent tree, while the player has not chosen
         st = p["suggestedTalents"]
         ok = (isinstance(st, dict) and set(st) <= {"main", "second"}

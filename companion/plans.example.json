@@ -6,6 +6,7 @@
  },
  "characters": {
   "Firstname": {
+   "basedOn": { "zone": "Zone from the snapshot's location", "snapshot": "2026-01-31 18:05:00" },
    "goalsUsed": "talents Main tree, second Second tree; role Healer; working towards First mount, Dungeons",
    "headline": "One or two sentences to you: where you stand and the single most useful thing for you to do next.",
    "headlineShort": "At most 100 characters, to you: the one thing for you to do next.",
